@@ -22,6 +22,15 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+def account_role(tenant: Tenant) -> str:
+    admin_emails = {email.strip().lower() for email in os.getenv("ADMIN_EMAILS", "").split(",") if email.strip()}
+    landlord_emails = {email.strip().lower() for email in os.getenv("LANDLORD_EMAILS", "").split(",") if email.strip()}
+    if tenant.t_email.lower() in admin_emails:
+        return "admin"
+    if tenant.t_email.lower() in landlord_emails:
+        return "landlord"
+    return "tenant"
+
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -75,10 +84,10 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
         )
     
     access_token = create_access_token(
-        data={"sub": str(tenant.tenant_id)},
+        data={"sub": str(tenant.tenant_id), "role": account_role(tenant)},
         expires_delta=timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "role": account_role(tenant)}
 @router.get("/users/me", response_model=TenantResponse)
 def read_users_me(current_tenant: Tenant = Depends(get_current_tenant)):
     return current_tenant

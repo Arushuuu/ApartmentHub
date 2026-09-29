@@ -29,6 +29,19 @@ class TenantResponse(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    role: str
+
+class AccountSetup(BaseModel):
+    existing_unit_id: int | None = None
+    building_name: str | None = None
+    street: str | None = None
+    unit_no: str | None = None
+    pincode: str | None = None
+    base_rent: Decimal | None = None
+    start_date: date | None = None
+    end_date: date | None = None
+    monthly_rent: Decimal | None = None
+    deposit_amount: Decimal | None = None
 
 class LeaseResponse(BaseModel):
     lease_id: int
@@ -51,7 +64,7 @@ class UtilityShareResponse(BaseModel):
 
 # Maintenance Ticket Schemas
 class TicketCreate(BaseModel):
-    unit_id: int
+    unit_id: int | None = None
     category: str
     description: str
 

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine, Base
-from app.routers import account, auth, leases, tickets, utilities
+from app.routers import account, admin, auth, leases, tickets, utilities
 
 Base.metadata.create_all(bind=engine)
 
@@ -20,6 +20,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(account.router)
+app.include_router(admin.router)
 app.include_router(leases.router)
 app.include_router(tickets.router)
 app.include_router(utilities.router)
