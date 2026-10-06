@@ -4,7 +4,23 @@ import { request } from './services/api';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value ?? 0);
 
-function Auth({ onSuccess }) {
+function Landing({ openAuth }) {
+  const scrollToAbout = () => document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth' });
+  return <main className="landing-page">
+    <section className="landing-hero">
+      <div className="landing-image landing-image-hero" aria-hidden="true" />
+      <header className="landing-header"><span className="landing-logo">⌂</span><strong>ApartmentHub</strong><button onClick={scrollToAbout}>About us ↓</button></header>
+      <div className="hero-quote"><p>“Home is not a place. It is a feeling of belonging.”</p><span>— ApartmentHub</span></div>
+      <div className="student-credit">Arushi Shandilya<br />CSE A<br />U25UV24T029019</div>
+    </section>
+    <section className="about-section" id="about-us">
+      <div className="landing-image landing-image-about" aria-hidden="true" />
+      <article className="about-copy"><p className="eyebrow">ABOUT APARTMENTHUB</p><h1>A simpler rhythm for shared living.</h1><p>ApartmentHub brings rent, leases, shared utilities and maintenance requests into one thoughtful space. Tenants can follow what matters at home, while administrators keep every record organised and easy to manage.</p><p>Built for clarity, connection and a little more calm in everyday rental life.</p><button className="landing-cta" onClick={openAuth}>Sign in or create an account →</button></article>
+    </section>
+  </main>;
+}
+
+function Auth({ onSuccess, onBack }) {
   const [mode, setMode] = useState('login'); const [choice, setChoice] = useState('tenant'); const [error, setError] = useState(''); const [loading, setLoading] = useState(false);
   async function submit(event) {
     event.preventDefault(); setLoading(true); setError(''); const form = new FormData(event.currentTarget);
@@ -15,7 +31,7 @@ function Auth({ onSuccess }) {
       localStorage.setItem('apartmenthub_token', login.access_token); localStorage.setItem('apartmenthub_role', login.role); onSuccess(login.role, mode === 'signup');
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
-  return <main className="auth-shell"><section className="auth-story"><div className="brand"><span className="brand-mark">⌂</span> ApartmentHub</div><div><p className="eyebrow">ONE HOME, ONE PLACE</p><h1>Every rental<br />detail, connected.</h1></div></section><section className="auth-panel"><div className="auth-card"><p className="eyebrow">WELCOME TO APARTMENTHUB</p><h2>{mode === 'login' ? 'Sign in' : 'Create a tenant account'}</h2><div className="role-picker">{['tenant','admin','landlord'].map(role => <button type="button" key={role} className={choice === role ? 'selected' : ''} onClick={() => setChoice(role)}><strong>{role}</strong></button>)}</div><form onSubmit={submit}>{mode === 'signup' && <><label>Full name<input name="name" required /></label><label>Date of birth<input name="dob" type="date" required /></label><label>Phone number<input name="phone" required /></label></>}<label>Email address<input name="email" type="email" required /></label><label>Password<input name="password" type="password" minLength="8" required /></label>{error && <p className="error">{error}</p>}<button className="primary" disabled={loading}>{loading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'} →</button></form><p className="switch">{mode === 'login' ? 'New tenant?' : 'Already have an account?'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>{mode === 'login' ? 'Create one' : 'Sign in'}</button></p></div></section></main>;
+  return <main className="auth-shell"><section className="auth-story"><div className="brand"><span className="brand-mark">⌂</span> ApartmentHub</div><div><p className="eyebrow">ONE HOME, ONE PLACE</p><h1>Every rental<br />detail, connected.</h1></div></section><section className="auth-panel"><div className="auth-card"><button className="auth-back" onClick={onBack}>← Back to welcome</button><p className="eyebrow">WELCOME TO APARTMENTHUB</p><h2>{mode === 'login' ? 'Sign in' : 'Create a tenant account'}</h2><div className="role-picker">{['tenant','admin'].map(role => <button type="button" key={role} className={choice === role ? 'selected' : ''} onClick={() => setChoice(role)}><strong>{role}</strong></button>)}</div><form onSubmit={submit}>{mode === 'signup' && <><label>Full name<input name="name" required /></label><label>Date of birth<input name="dob" type="date" required /></label><label>Phone number<input name="phone" required /></label></>}<label>Email address<input name="email" type="email" required /></label><label>Password<input name="password" type="password" minLength="8" required /></label>{error && <p className="error">{error}</p>}<button className="primary" disabled={loading}>{loading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'} →</button></form><p className="switch">{mode === 'login' ? 'New tenant?' : 'Already have an account?'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>{mode === 'login' ? 'Create one' : 'Sign in'}</button></p></div></section></main>;
 }
 
 function Setup({ done }) {
@@ -43,8 +59,8 @@ function AdminHome({ logout }) {
 }
 
 export default function AppV2() {
-  const [role, setRole] = useState(localStorage.getItem('apartmenthub_role')); const [setup, setSetup] = useState(false); const token = localStorage.getItem('apartmenthub_token'); const logout = () => { localStorage.clear(); location.reload(); };
-  if (!token || !role) return <Auth onSuccess={(newRole, needsSetup) => { setRole(newRole); setSetup(needsSetup); }} />;
+  const [role, setRole] = useState(localStorage.getItem('apartmenthub_role')); const [setup, setSetup] = useState(false); const [screen, setScreen] = useState('landing'); const token = localStorage.getItem('apartmenthub_token'); const logout = () => { localStorage.clear(); location.reload(); };
+  if (!token || !role) return screen === 'auth' ? <Auth onBack={() => setScreen('landing')} onSuccess={(newRole, needsSetup) => { setRole(newRole); setSetup(needsSetup); }} /> : <Landing openAuth={() => setScreen('auth')} />;
   if (setup && role === 'tenant') return <Setup done={() => setSetup(false)} />;
   if (role === 'admin') return <AdminHome logout={logout} />;
   if (role === 'landlord') return <Shell title="ApartmentHub Landlord" tabs={[]} active="" setActive={() => {}} logout={logout}><article className="panel"><p className="eyebrow">COMING SOON</p><h1>Landlord workspace</h1><p className="muted">Maintenance ticket handling will be added here next.</p></article></Shell>;
