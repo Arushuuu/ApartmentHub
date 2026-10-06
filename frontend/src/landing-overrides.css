@@ -1,0 +1,44 @@
+.landing-image-about {
+  left: 0;
+  right: 35%;
+  background-position: left center;
+}
+
+.landing-header {
+  color: #35232c;
+}
+
+.landing-brand {
+  position: absolute;
+  left: 32.5%;
+  top: 50vh;
+  transform: translate(-50%, -50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: #35232c;
+  text-shadow: 0 1px 14px #f8ede3;
+  font-size: 75px;
+  letter-spacing: -3px;
+}
+
+.landing-logo {
+  background: #35232c;
+}
+
+.hero-quote p {
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .landing-image-about {
+    left: 0;
+    right: 0;
+  }
+
+  .landing-brand {
+    left: 50%;
+    top: 50vh;
+    font-size: clamp(44px, 13vw, 75px);
+  }
+}

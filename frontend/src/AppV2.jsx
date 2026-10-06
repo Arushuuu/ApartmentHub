@@ -9,9 +9,9 @@ function Landing({ openAuth }) {
   return <main className="landing-page">
     <section className="landing-hero">
       <div className="landing-image landing-image-hero" aria-hidden="true" />
-      <header className="landing-header"><span className="landing-logo">⌂</span><strong>ApartmentHub</strong><button onClick={scrollToAbout}>About us ↓</button></header>
-      <div className="hero-quote"><p>“Home is not a place. It is a feeling of belonging.”</p><span>— ApartmentHub</span></div>
-      <div className="student-credit">Arushi Shandilya<br />CSE A<br />U25UV24T029019</div>
+      <header className="landing-header"><div className="landing-brand"><strong>ApartmentHub</strong></div><button onClick={scrollToAbout}>About us ↓</button></header>
+      <div className="hero-quote"><p>“Home is not a place. It is a feeling of belonging.”</p></div>
+      <div className="student-credit">Arushi Shandilya<br />U25UV24T029019<br />CSE A · 5th Sem</div>
     </section>
     <section className="about-section" id="about-us">
       <div className="landing-image landing-image-about" aria-hidden="true" />
