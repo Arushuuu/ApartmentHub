@@ -3,7 +3,8 @@ from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import Date, DateTime, Numeric
+from pydantic import BaseModel, EmailStr, Field
+from sqlalchemy import Date, DateTime, Numeric, func, or_
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,20 @@ from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, Maintenanc
 from app.routers.auth import account_role, get_current_tenant, get_password_hash
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
+
+class TenantCreateInput(BaseModel):
+    tenant_name: str = Field(min_length=1, max_length=100)
+    t_email: EmailStr
+    password: str = Field(min_length=8, max_length=72)
+    t_dob: date
+    t_phone_no: str = Field(min_length=1, max_length=20)
+
+class TenantUpdateInput(BaseModel):
+    tenant_name: str | None = Field(default=None, min_length=1, max_length=100)
+    t_email: EmailStr | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=72)
+    t_dob: date | None = None
+    t_phone_no: str | None = Field(default=None, min_length=1, max_length=20)
 
 RESOURCES = {
     "tenants": Tenant, "apartment_units": ApartmentUnit, "lease_agreements": LeaseAgreement,
@@ -48,9 +63,67 @@ def clean_values(model, payload: dict[str, Any], creating: bool) -> dict[str, An
             values[name] = Decimal(str(value))
     return values
 
+def tenant_view(tenant: Tenant) -> dict[str, Any]:
+    return {"tenant_id": tenant.tenant_id, "tenant_name": tenant.tenant_name, "t_email": tenant.t_email, "t_dob": tenant.t_dob, "t_phone_no": tenant.t_phone_no}
+
 @router.get("/tables")
 def list_tables(_: Tenant = Depends(require_admin)):
     return list(RESOURCES)
+
+@router.get("/dashboard")
+def dashboard(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    return {
+        "total_users": db.query(func.count(Tenant.tenant_id)).scalar(),
+        "pending_tickets": db.query(func.count(MaintenanceTicket.ticket_id)).filter(MaintenanceTicket.status.in_(["Open", "In Progress"])).scalar(),
+        "resolved_tickets": db.query(func.count(MaintenanceTicket.ticket_id)).filter(MaintenanceTicket.status.in_(["Resolved", "Closed"])).scalar(),
+        "pending_deposits": db.query(func.count(SecurityDeposit.deposit_id)).filter(SecurityDeposit.refund_status.in_(["Held", "Partial Refund"])).scalar(),
+        "active_leases": db.query(func.count(LeaseAgreement.lease_id)).scalar(),
+    }
+
+@router.get("/users")
+def list_users(search: str = "", db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    query = db.query(Tenant)
+    if search.strip():
+        term = f"%{search.strip()}%"
+        query = query.filter(or_(Tenant.tenant_name.ilike(term), Tenant.t_email.ilike(term)))
+    return [tenant_view(tenant) for tenant in query.order_by(Tenant.tenant_name).all()]
+
+@router.post("/users", status_code=status.HTTP_201_CREATED)
+def create_user(payload: TenantCreateInput, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    if db.query(Tenant).filter(Tenant.t_email == payload.t_email).first():
+        raise HTTPException(status_code=400, detail="Email already belongs to a tenant")
+    tenant = Tenant(tenant_name=payload.tenant_name, t_email=payload.t_email, password_hash=get_password_hash(payload.password), t_dob=payload.t_dob, t_phone_no=payload.t_phone_no)
+    db.add(tenant); db.commit(); db.refresh(tenant)
+    return tenant_view(tenant)
+
+@router.patch("/users/{tenant_id}")
+def update_user(tenant_id: int, payload: TenantUpdateInput, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    updates = payload.model_dump(exclude_none=True)
+    if "password" in updates:
+        tenant.password_hash = get_password_hash(updates.pop("password"))
+    for field, value in updates.items():
+        setattr(tenant, field, value)
+    try:
+        db.commit(); db.refresh(tenant)
+    except Exception as error:
+        db.rollback(); raise HTTPException(status_code=400, detail=f"User update failed: {str(error).splitlines()[0]}")
+    return tenant_view(tenant)
+
+@router.delete("/users/{tenant_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_user(tenant_id: int, db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):
+    if tenant_id == current_admin.tenant_id:
+        raise HTTPException(status_code=400, detail="You cannot delete the account currently signed in as admin")
+    tenant = db.get(Tenant, tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    db.delete(tenant)
+    try:
+        db.commit()
+    except Exception as error:
+        db.rollback(); raise HTTPException(status_code=400, detail=f"User deletion failed: {str(error).splitlines()[0]}")
 
 @router.get("/{resource}")
 def list_records(resource: str, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import AdminWorkspace from './components/AdminWorkspace';
 import MaintenanceForm from './components/MaintenanceForm';
 import { request } from './services/api';
 
@@ -62,7 +63,7 @@ export default function AppV2() {
   const [role, setRole] = useState(localStorage.getItem('apartmenthub_role')); const [setup, setSetup] = useState(false); const [screen, setScreen] = useState('landing'); const token = localStorage.getItem('apartmenthub_token'); const logout = () => { localStorage.clear(); location.reload(); };
   if (!token || !role) return screen === 'auth' ? <Auth onBack={() => setScreen('landing')} onSuccess={(newRole, needsSetup) => { setRole(newRole); setSetup(needsSetup); }} /> : <Landing openAuth={() => setScreen('auth')} />;
   if (setup && role === 'tenant') return <Setup done={() => setSetup(false)} />;
-  if (role === 'admin') return <AdminHome logout={logout} />;
+  if (role === 'admin') return <AdminWorkspace logout={logout} />;
   if (role === 'landlord') return <Shell title="ApartmentHub Landlord" tabs={[]} active="" setActive={() => {}} logout={logout}><article className="panel"><p className="eyebrow">COMING SOON</p><h1>Landlord workspace</h1><p className="muted">Maintenance ticket handling will be added here next.</p></article></Shell>;
   return <TenantHome logout={logout} />;
 }
