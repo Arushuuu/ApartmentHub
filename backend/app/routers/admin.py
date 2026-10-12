@@ -28,6 +28,9 @@ class TenantUpdateInput(BaseModel):
     t_dob: date | None = None
     t_phone_no: str | None = Field(default=None, min_length=1, max_length=20)
 
+class CloseTicketInput(BaseModel):
+    update_message: str = Field(default="Closed by administrator", min_length=1, max_length=1000)
+
 RESOURCES = {
     "tenants": Tenant, "apartment_units": ApartmentUnit, "lease_agreements": LeaseAgreement,
     "security_deposits": SecurityDeposit, "utility_bills": UtilityBill,
@@ -124,6 +127,36 @@ def delete_user(tenant_id: int, db: Session = Depends(get_db), current_admin: Te
         db.commit()
     except Exception as error:
         db.rollback(); raise HTTPException(status_code=400, detail=f"User deletion failed: {str(error).splitlines()[0]}")
+
+@router.get("/tickets/active")
+def active_tickets(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    tickets = (db.query(MaintenanceTicket)
+        .filter(MaintenanceTicket.status.in_(["Open", "In Progress"]))
+        .order_by(MaintenanceTicket.created_at.desc())
+        .all())
+    return [{
+        "ticket_id": ticket.ticket_id,
+        "tenant_id": ticket.tenant_id,
+        "tenant_name": ticket.tenant.tenant_name,
+        "tenant_email": ticket.tenant.t_email,
+        "unit_id": ticket.unit_id,
+        "category": ticket.category,
+        "description": ticket.description,
+        "status": ticket.status,
+        "created_at": ticket.created_at,
+    } for ticket in tickets]
+
+@router.patch("/tickets/{ticket_id}/close")
+def close_ticket(ticket_id: int, payload: CloseTicketInput, db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):
+    ticket = db.get(MaintenanceTicket, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Maintenance ticket not found")
+    if ticket.status in ("Resolved", "Closed"):
+        raise HTTPException(status_code=400, detail="This maintenance ticket is already closed")
+    ticket.status = "Closed"
+    db.add(TicketUpdateLog(ticket_id=ticket.ticket_id, updated_by=current_admin.tenant_name, update_message=payload.update_message))
+    db.commit(); db.refresh(ticket)
+    return {"message": "Maintenance ticket closed", "ticket_id": ticket.ticket_id, "status": ticket.status}
 
 @router.get("/{resource}")
 def list_records(resource: str, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
