@@ -9,7 +9,7 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, SecurityDeposit, Tenant, TicketUpdateLog, UtilityBill
+from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, RentPayment, SecurityDeposit, Tenant, TicketUpdateLog, UtilityBill
 from app.routers.auth import account_role, get_current_tenant, get_password_hash
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -33,7 +33,7 @@ class CloseTicketInput(BaseModel):
 
 RESOURCES = {
     "tenants": Tenant, "apartment_units": ApartmentUnit, "lease_agreements": LeaseAgreement,
-    "security_deposits": SecurityDeposit, "utility_bills": UtilityBill,
+    "security_deposits": SecurityDeposit, "rent_payments": RentPayment, "utility_bills": UtilityBill,
     "bill_split_shares": BillSplitShare, "maintenance_tickets": MaintenanceTicket,
     "ticket_update_logs": TicketUpdateLog,
 }
@@ -75,12 +75,33 @@ def list_tables(_: Tenant = Depends(require_admin)):
 
 @router.get("/dashboard")
 def dashboard(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    leases = db.query(LeaseAgreement).all()
+    billing_month = date.today().replace(day=1)
+    paid_lease_ids = {
+        lease_id for (lease_id,) in db.query(RentPayment.lease_id)
+        .filter(RentPayment.billing_month == billing_month, RentPayment.payment_status == "Paid")
+        .all()
+    }
+    unpaid_rent_count = sum(lease.lease_id not in paid_lease_ids for lease in leases)
+    billed_tenants = db.query(func.count(func.distinct(BillSplitShare.tenant_id))).scalar() or 0
+    unpaid_utility_tenants = (db.query(func.count(func.distinct(BillSplitShare.tenant_id)))
+        .filter(BillSplitShare.payment_status == "Unpaid")
+        .scalar() or 0)
+    total_tickets = db.query(func.count(MaintenanceTicket.ticket_id)).scalar() or 0
+    pending_tickets = db.query(func.count(MaintenanceTicket.ticket_id)).filter(MaintenanceTicket.status.in_(["Open", "In Progress"])).scalar() or 0
     return {
         "total_users": db.query(func.count(Tenant.tenant_id)).scalar(),
-        "pending_tickets": db.query(func.count(MaintenanceTicket.ticket_id)).filter(MaintenanceTicket.status.in_(["Open", "In Progress"])).scalar(),
+        "pending_tickets": pending_tickets,
         "resolved_tickets": db.query(func.count(MaintenanceTicket.ticket_id)).filter(MaintenanceTicket.status.in_(["Resolved", "Closed"])).scalar(),
         "pending_deposits": db.query(func.count(SecurityDeposit.deposit_id)).filter(SecurityDeposit.refund_status.in_(["Held", "Partial Refund"])).scalar(),
-        "active_leases": db.query(func.count(LeaseAgreement.lease_id)).scalar(),
+        "active_leases": len(leases),
+        "unpaid_rent_count": unpaid_rent_count,
+        "rent_unpaid_percentage": round((unpaid_rent_count / len(leases) * 100) if leases else 0, 1),
+        "billed_tenants": billed_tenants,
+        "unpaid_utility_tenants": unpaid_utility_tenants,
+        "utility_unpaid_percentage": round((unpaid_utility_tenants / billed_tenants * 100) if billed_tenants else 0, 1),
+        "total_tickets": total_tickets,
+        "unresolved_ticket_percentage": round((pending_tickets / total_tickets * 100) if total_tickets else 0, 1),
     }
 
 @router.get("/users")
@@ -145,6 +166,21 @@ def active_tickets(db: Session = Depends(get_db), _: Tenant = Depends(require_ad
         "status": ticket.status,
         "created_at": ticket.created_at,
     } for ticket in tickets]
+
+@router.get("/tickets/summary")
+def ticket_summary(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    rows = (db.query(MaintenanceTicket.category, func.count(MaintenanceTicket.ticket_id))
+        .group_by(MaintenanceTicket.category)
+        .order_by(MaintenanceTicket.category)
+        .all())
+    total = sum(count for _, count in rows)
+    return {
+        "total": total,
+        "categories": [
+            {"category": category, "count": count, "percentage": round((count / total * 100) if total else 0, 1)}
+            for category, count in rows
+        ],
+    }
 
 @router.patch("/tickets/{ticket_id}/close")
 def close_ticket(ticket_id: int, payload: CloseTicketInput, db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):

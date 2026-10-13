@@ -10,7 +10,7 @@ from datetime import date
 from decimal import Decimal
 
 from app.database import SessionLocal
-from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, SecurityDeposit, Tenant, UtilityBill
+from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, RentPayment, SecurityDeposit, Tenant, UtilityBill
 from app.routers.auth import get_password_hash
 
 
@@ -112,8 +112,29 @@ def main():
                 ))
             created += 1
 
+        # A rent-payment row is tracked per active lease for the current demo
+        # month. The mix of statuses makes the admin percentage meaningful.
+        rent_rows = 0
+        billing_month = date(2026, 10, 1)
+        for lease in db.query(LeaseAgreement).all():
+            exists = db.query(RentPayment).filter(
+                RentPayment.lease_id == lease.lease_id,
+                RentPayment.billing_month == billing_month,
+            ).first()
+            if exists:
+                continue
+            paid = lease.lease_id % 3 != 0
+            db.add(RentPayment(
+                lease_id=lease.lease_id,
+                billing_month=billing_month,
+                amount=lease.monthly_rent,
+                payment_status="Paid" if paid else "Pending",
+                paid_on=date(2026, 10, 5) if paid else None,
+            ))
+            rent_rows += 1
+
         db.commit()
-        print(f"Created {created} demo tenants. Total tenants: {db.query(Tenant).count()}")
+        print(f"Created {created} demo tenants and {rent_rows} rent-payment rows. Total tenants: {db.query(Tenant).count()}")
     except Exception:
         db.rollback()
         raise

@@ -11,7 +11,33 @@
 .admin-ticket-card p { color: #725b65; line-height: 1.55; }
 .ticket-meta { border-top: 1px solid #eadfd6; padding-top: 14px; font-size: 13px; }
 .ticket-meta span:first-child { display: grid; gap: 2px; }
+.ticket-chart { display: flex; align-items: center; gap: 28px; margin: 0 0 22px; padding: 22px 26px; background: #fffaf5; }
+.ticket-pie { width: 148px; height: 148px; border-radius: 50%; display: grid; place-items: center; flex: none; box-shadow: inset 0 0 0 1px #fffaf5, 0 8px 22px #85586f20; }
+.ticket-pie > div { width: 86px; height: 86px; border-radius: 50%; background: #fffaf5; display: grid; place-content: center; text-align: center; }
+.ticket-pie strong { font-size: 25px; line-height: 1; color: #5d3b4b; }
+.ticket-pie span { font-size: 10px; font-weight: 900; text-transform: uppercase; letter-spacing: .8px; color: #85586f; margin-top: 5px; }
+.ticket-chart-copy h2 { font-size: 20px; margin: 0 0 14px; }
+.ticket-legend { display: flex; flex-wrap: wrap; gap: 8px 14px; }
+.ticket-legend > span { display: flex; gap: 6px; align-items: center; color: #725b65; font-size: 12px; }
+.ticket-legend i { width: 10px; height: 10px; border-radius: 50%; display: block; }
+.ticket-legend strong { color: #5d3b4b; }
+.admin-percentage-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 18px; }
+.percentage-stat { background: #fffaf5; border: 1px solid #eadfd6; border-radius: 18px; padding: 17px; display: flex; align-items: center; gap: 15px; }
+.percentage-ring { width: 76px; height: 76px; border-radius: 50%; background: conic-gradient(#85586f var(--percentage), #dfd3c3 0); display: grid; place-items: center; flex: none; }
+.percentage-ring strong { width: 58px; height: 58px; border-radius: 50%; background: #fffaf5; display: grid; place-items: center; font-size: 14px; color: #5d3b4b; }
+.percentage-stat p { margin: 0 0 5px; font-size: 13px; font-weight: 900; color: #5d3b4b; }
+.percentage-stat span { font-size: 12px; color: #725b65; }
+
+@media (max-width: 1000px) and (min-width: 701px) {
+  .admin-percentage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
 
 @media (max-width: 700px) {
   .admin-ticket-grid { grid-template-columns: 1fr; }
+  .ticket-chart { align-items: flex-start; gap: 18px; }
+  .ticket-pie { width: 112px; height: 112px; }
+  .ticket-pie > div { width: 64px; height: 64px; }
+  .ticket-pie strong { font-size: 20px; }
+  .admin-percentage-grid { grid-template-columns: 1fr; }
+  .percentage-stat { padding: 14px; }
 }

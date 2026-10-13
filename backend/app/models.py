@@ -46,6 +46,7 @@ class LeaseAgreement(Base):
     unit = relationship("ApartmentUnit", back_populates="leases")
     tenant = relationship("Tenant", back_populates="leases")
     deposit = relationship("SecurityDeposit", back_populates="lease", uselist=False)
+    rent_payments = relationship("RentPayment", back_populates="lease", cascade="all, delete-orphan")
 
 
 class SecurityDeposit(Base):
@@ -57,6 +58,20 @@ class SecurityDeposit(Base):
     refund_status = Column(Enum("Held", "Partial Refund", "Fully Refunded"), default="Held")
 
     lease = relationship("LeaseAgreement", back_populates="deposit")
+
+
+class RentPayment(Base):
+    __tablename__ = "rent_payments"
+    __table_args__ = (UniqueConstraint("lease_id", "billing_month", name="uq_lease_rent_month"),)
+
+    payment_id = Column(Integer, primary_key=True, index=True)
+    lease_id = Column(Integer, ForeignKey("lease_agreements.lease_id", ondelete="CASCADE"), nullable=False)
+    billing_month = Column(Date, nullable=False)
+    amount = Column(Numeric(10, 2), nullable=False)
+    payment_status = Column(Enum("Pending", "Paid"), default="Pending", nullable=False)
+    paid_on = Column(Date, nullable=True)
+
+    lease = relationship("LeaseAgreement", back_populates="rent_payments")
 
 
 class UtilityBill(Base):
