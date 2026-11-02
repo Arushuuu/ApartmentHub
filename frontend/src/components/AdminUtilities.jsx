@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { request } from '../services/api';
+import RefreshButton from './RefreshButton';
 import './utility-ledger.css';
 
 const today = new Date().toISOString().slice(0, 10);
@@ -16,16 +17,20 @@ export default function AdminUtilities() {
   const [error, setError] = useState('');
 
   const loadBills = useCallback(async () => {
-    try { setBills(await request('/admin/utility-bills')); setError(''); }
-    catch (caught) { setError(caught.message); }
+    try { setBills(await request('/admin/utility-bills')); setError(''); return true; }
+    catch (caught) { setError(caught.message); return false; }
   }, []);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([
-      loadBills(),
-      request('/admin/apartment_units').then(setUnits).catch(caught => setError(caught.message)),
+    const [billRows, unitRows] = await Promise.allSettled([
+      request('/admin/utility-bills'), request('/admin/apartment_units'),
     ]);
-  }, [loadBills]);
+    if (billRows.status === 'fulfilled') setBills(billRows.value);
+    if (unitRows.status === 'fulfilled') setUnits(unitRows.value);
+    const failures = [billRows, unitRows].filter(result => result.status === 'rejected');
+    setError(failures.map(result => result.reason.message).join(' '));
+    return failures.length === 0;
+  }, []);
 
   useEffect(() => {
     refreshAll();
@@ -64,7 +69,7 @@ export default function AdminUtilities() {
   const pendingCount = allShares.filter(share => share.payment_status === 'Pending Verification').length;
 
   return <section className="utility-ledger-page">
-    <div className="admin-title"><div><p className="eyebrow">SHARED LIVING</p><h1>Utility bills & ledger</h1><p className="muted">Split each bill equally across tenants with an active lease on its bill date. Changes appear automatically within 10 seconds.</p></div><button type="button" className="soft-button" onClick={refreshAll}>Refresh</button></div>
+    <div className="admin-title"><div><p className="eyebrow">SHARED LIVING</p><h1>Utility bills & ledger</h1><p className="muted">Split each bill equally across tenants with an active lease on its bill date. Changes appear automatically within 10 seconds.</p></div><RefreshButton onRefresh={refreshAll} /></div>
     <div className="utility-summary"><article><strong>{bills.length}</strong><span>Bills</span></article><article><strong>{allShares.length}</strong><span>Tenant shares</span></article><article><strong>{paidCount}</strong><span>Paid</span></article><article><strong>{pendingCount}</strong><span>To verify</span></article></div>
     <form className="panel utility-create-form" onSubmit={createBill}>
       <div><p className="eyebrow">NEW UTILITY BILL</p><h2>Split a bill</h2></div>

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { request } from '../services/api';
+import RefreshButton from './RefreshButton';
 import './rent-ledger.css';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value ?? 0);
@@ -16,8 +17,8 @@ export default function AdminRentLedger() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const load = useCallback(async () => {
-    try { setPayments(await request('/admin/rent/months')); setError(''); }
-    catch (caught) { setError(caught.message); }
+    try { setPayments(await request('/admin/rent/months')); setError(''); return true; }
+    catch (caught) { setError(caught.message); return false; }
   }, []);
   useEffect(() => {
     load();
@@ -48,7 +49,7 @@ export default function AdminRentLedger() {
   }
 
   const filtered = payments.filter(payment => `${payment.billing_month} ${payment.lease_id} ${payment.unit_label} ${payment.shares.map(share => share.tenant_name).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
-  return <section className="rent-page"><div className="admin-title"><div><p className="eyebrow">RENTAL RECORDS</p><h1>Rent ledger</h1><p className="muted">Split monthly rent among the signatories on each lease, then verify payments made outside ApartmentHub.</p></div><button className="soft-button" onClick={load}>Refresh</button></div>
+  return <section className="rent-page"><div className="admin-title"><div><p className="eyebrow">RENTAL RECORDS</p><h1>Rent ledger</h1><p className="muted">Split monthly rent among the signatories on each lease, then verify payments made outside ApartmentHub.</p></div><RefreshButton onRefresh={load} /></div>
     <form className="panel rent-generate" onSubmit={generate}><div><h2>Generate monthly shares</h2><p className="muted">Creates one bill per lease active during that month. The full monthly rent is split exactly to the cent; existing months are left unchanged.</p></div><label>Billing month<input type="month" required value={month} onChange={event => setMonth(event.target.value)} /></label><button className="primary compact" disabled={busy}>{busy ? 'Creating...' : 'Generate month'}</button></form>
     {message && <p className="success-text" role="status">{message}</p>}
     {error && <p className="error banner" role="alert">{error}</p>}

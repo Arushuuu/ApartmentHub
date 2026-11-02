@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { request } from '../services/api';
+import RefreshButton from './RefreshButton';
 import './rent-ledger.css';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value ?? 0);
@@ -12,8 +13,8 @@ export default function TenantRent() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const load = useCallback(async () => {
-    try { setShares(await request('/rent/me')); setError(''); }
-    catch (caught) { setError(caught.message); }
+    try { setShares(await request('/rent/me')); setError(''); return true; }
+    catch (caught) { setError(caught.message); return false; }
   }, []);
   useEffect(() => {
     load();
@@ -36,7 +37,7 @@ export default function TenantRent() {
     finally { setWorking(null); }
   }
 
-  return <section className="rent-page"><div className="page-title"><div><p className="eyebrow">MONTHLY RENT</p><h1>My rent shares</h1><p className="muted">Your share and payment history for each billed month. Payments happen outside ApartmentHub.</p></div><button className="soft-button" onClick={load}>Refresh</button></div>
+  return <section className="rent-page"><div className="page-title"><div><p className="eyebrow">MONTHLY RENT</p><h1>My rent shares</h1><p className="muted">Your share and payment history for each billed month. Payments happen outside ApartmentHub.</p></div><RefreshButton onRefresh={load} /></div>
     {message && <p className="success-text" role="status">{message}</p>}
     {error && <p className="error banner" role="alert">{error}</p>}
     <div className="rent-card-grid">{shares.map(share => <article className="panel rent-card" key={share.share_id}>

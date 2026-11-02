@@ -5,6 +5,7 @@ import TicketTimeline from './components/TicketTimeline';
 import TenantUtilities from './components/TenantUtilities';
 import TenantLeases from './components/TenantLeases';
 import TenantRent from './components/TenantRent';
+import RefreshButton from './components/RefreshButton';
 import { request } from './services/api';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value ?? 0);
@@ -71,6 +72,7 @@ function TenantHome({ logout }) {
     if (shareRows.status === 'fulfilled') setShares(shareRows.value);
     const failures = [dashboard, ticketRows, leaseRows, shareRows].filter(result => result.status === 'rejected');
     setError(failures.map(result => result.reason.message).join(' '));
+    return failures.length === 0;
   };
   useEffect(() => { load(); }, [tab]);
   useEffect(() => { sessionStorage.setItem('apartmenthub_tenant_tab', tab); }, [tab]);
@@ -87,11 +89,11 @@ function TenantHome({ logout }) {
   return <Shell title="ApartmentHub" tabs={tenantTabs} active={tab} setActive={setTab} logout={logout}>
     {error && <p className="error banner">{error}</p>}
     {tab === 'home' && <>
-      <section className="welcome"><div><p className="eyebrow">YOUR HOME AT A GLANCE</p><h1>Hello, {data.tenant_name ?? 'there'}.</h1><p className="muted">Your apartment details, in one calm place.</p></div><button type="button" className="soft-button" onClick={load}>Refresh</button></section>
+      <section className="welcome"><div><p className="eyebrow">YOUR HOME AT A GLANCE</p><h1>Hello, {data.tenant_name ?? 'there'}.</h1><p className="muted">Your apartment details, in one calm place.</p></div><RefreshButton onRefresh={load} /></section>
       <section className="stats"><article><p>Your monthly rent share</p><strong>{money(data.my_rent_share)}</strong></article><article><p>Utilities due</p><strong>{money(data.utilities_due)}</strong></article><article><p>Open requests</p><strong>{data.open_tickets ?? 0}</strong></article></section>
       <section className="two-column"><article className="panel"><p className="eyebrow">RECENT BILLS</p>{shares.slice(0,3).map(s => <div className="line-item" key={s.share_id}><span>Utility bill</span><strong>{money(s.owed_amt)}</strong><span className={`badge ${s.payment_status === 'Paid' ? 'paid' : s.payment_status === 'Pending Verification' ? 'pending-verification' : 'unpaid'}`}>{s.payment_status}</span></div>)}{!shares.length && <Empty text="No utility bills assigned yet." />}</article><article className="panel warm"><p className="eyebrow">MAINTENANCE</p><h2>{tickets[0]?.category ?? 'All clear'}</h2><p className="muted">{tickets[0]?.description ?? 'Create a ticket whenever something needs attention.'}</p></article></section>
     </>}
-    {tab === 'tickets' && <><div className="page-title"><div><p className="eyebrow">HOME CARE</p><h1>Maintenance requests</h1><p className="muted">Follow each request from opening through completion.</p></div><button type="button" className="soft-button" onClick={load}>Refresh</button></div><MaintenanceForm onCreated={load} /><div className="tenant-ticket-list">{tickets.map(t => <article className="panel tenant-ticket-card" key={t.ticket_id}><div className="ticket-row"><div><strong>{t.category}</strong><p>{t.description}</p><small>Ticket #{t.ticket_id}</small></div><span className={`badge ${t.status === 'Closed' || t.status === 'Resolved' ? 'paid' : 'unpaid'}`}>{t.status}</span></div><TicketTimeline ticket={t} /></article>)}{!tickets.length && <article className="panel"><Empty text="No maintenance tickets yet." /></article>}</div></>}
+    {tab === 'tickets' && <><div className="page-title"><div><p className="eyebrow">HOME CARE</p><h1>Maintenance requests</h1><p className="muted">Follow each request from opening through completion.</p></div><RefreshButton onRefresh={load} /></div><MaintenanceForm onCreated={load} /><div className="tenant-ticket-list">{tickets.map(t => <article className="panel tenant-ticket-card" key={t.ticket_id}><div className="ticket-row"><div><strong>{t.category}</strong><p>{t.description}</p><small>Ticket #{t.ticket_id}</small></div><span className={`badge ${t.status === 'Closed' || t.status === 'Resolved' ? 'paid' : 'unpaid'}`}>{t.status}</span></div><TicketTimeline ticket={t} /></article>)}{!tickets.length && <article className="panel"><Empty text="No maintenance tickets yet." /></article>}</div></>}
     {tab === 'utilities' && <TenantUtilities shares={shares} onRefresh={load} />}
     {tab === 'rent' && <TenantRent />}
     {tab === 'lease' && <TenantLeases leases={leases} onRefresh={load} />}

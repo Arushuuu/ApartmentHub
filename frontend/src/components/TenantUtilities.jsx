@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { request } from '../services/api';
+import RefreshButton from './RefreshButton';
 import './utility-ledger.css';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value ?? 0);
@@ -28,7 +29,7 @@ export default function TenantUtilities({ shares, onRefresh }) {
     .reduce((total, share) => total + Number(share.owed_amt), 0);
 
   return <section className="tenant-utilities">
-    <div className="page-title"><div><p className="eyebrow">SHARED LIVING</p><h1>My utility bills</h1><p className="muted">See your share, submit a payment for verification, and follow every status change. Updates appear automatically within 10 seconds.</p></div><button className="soft-button" onClick={onRefresh}>Refresh</button></div>
+    <div className="page-title"><div><p className="eyebrow">SHARED LIVING</p><h1>My utility bills</h1><p className="muted">See your share, submit a payment for verification, and follow every status change. Updates appear automatically within 10 seconds.</p></div><RefreshButton onRefresh={onRefresh} /></div>
     <div className="utility-tenant-balance panel"><span>Amount awaiting verified payment</span><strong>{money(remaining)}</strong></div>
     {message && <p className="success-text" role="status">{message}</p>}
     {error && <p className="error banner" role="alert">{error}</p>}

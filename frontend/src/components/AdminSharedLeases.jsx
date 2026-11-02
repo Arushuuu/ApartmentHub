@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { request } from '../services/api';
+import RefreshButton from './RefreshButton';
 import './shared-leases.css';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value ?? 0);
@@ -20,17 +21,21 @@ export default function AdminSharedLeases() {
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    try { setLeases(await request('/admin/shared-leases')); setError(''); }
-    catch (caught) { setError(caught.message); }
+    try { setLeases(await request('/admin/shared-leases')); setError(''); return true; }
+    catch (caught) { setError(caught.message); return false; }
   }, []);
 
   const refreshAll = useCallback(async () => {
-    await Promise.all([
-      load(),
-      request('/admin/users').then(setTenants).catch(caught => setError(caught.message)),
-      request('/admin/apartment_units').then(setUnits).catch(caught => setError(caught.message)),
+    const [leaseRows, userRows, unitRows] = await Promise.allSettled([
+      request('/admin/shared-leases'), request('/admin/users'), request('/admin/apartment_units'),
     ]);
-  }, [load]);
+    if (leaseRows.status === 'fulfilled') setLeases(leaseRows.value);
+    if (userRows.status === 'fulfilled') setTenants(userRows.value);
+    if (unitRows.status === 'fulfilled') setUnits(unitRows.value);
+    const failures = [leaseRows, userRows, unitRows].filter(result => result.status === 'rejected');
+    setError(failures.map(result => result.reason.message).join(' '));
+    return failures.length === 0;
+  }, []);
 
   useEffect(() => {
     refreshAll();
@@ -91,7 +96,7 @@ export default function AdminSharedLeases() {
   }
 
   return <section className="shared-lease-admin">
-    <div className="admin-title"><div><p className="eyebrow">RENTAL RECORDS</p><h1>Shared leases & deposits</h1><p className="muted">Manage co-signers, each tenant's deposit contribution, and an auditable refund history.</p></div><button type="button" className="soft-button" onClick={refreshAll}>Refresh</button></div>
+    <div className="admin-title"><div><p className="eyebrow">RENTAL RECORDS</p><h1>Shared leases & deposits</h1><p className="muted">Manage co-signers, each tenant's deposit contribution, and an auditable refund history.</p></div><RefreshButton onRefresh={refreshAll} /></div>
     {message && <p className="success-text" role="status">{message}</p>}
     {error && <p className="error banner" role="alert">{error}</p>}
     <details className="panel shared-create"><summary>+ Create a shared lease</summary><form onSubmit={createLease}>

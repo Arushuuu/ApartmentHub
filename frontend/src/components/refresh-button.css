@@ -1,0 +1,22 @@
+.refresh-control {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 5px;
+  flex: none;
+}
+
+.refresh-control button:disabled {
+  opacity: .65;
+  cursor: wait;
+}
+
+.refresh-status {
+  color: #725b65;
+  font-size: 11px;
+  min-height: 1em;
+}
+
+.refresh-status-error {
+  color: #a23a48;
+}
