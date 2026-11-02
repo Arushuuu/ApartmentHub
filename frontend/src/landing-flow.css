@@ -108,7 +108,9 @@ html { scroll-behavior: smooth; }
 .story-about-button:hover, .landing-cta:hover { background: #70465d; transform: translateY(-2px); }
 .story-about-button:hover span { transform: translateY(3px); }
 .landing-cta { transition: background .25s ease, transform .25s ease; }
-.intro-start:focus-visible, .story-about-button:focus-visible, .landing-cta:focus-visible { outline: 3px solid #35232c; outline-offset: 4px; }
+.about-back { display: block; margin: 0 0 18px; padding: 0; background: transparent; color: #85586f; font-size: 14px; font-weight: 900; transition: color .25s ease, transform .25s ease; }
+.about-back:hover { color: #5d3b4b; transform: translateX(-3px); }
+.intro-start:focus-visible, .story-about-button:focus-visible, .landing-cta:focus-visible, .about-back:focus-visible { outline: 3px solid #35232c; outline-offset: 4px; }
 
 @media (max-width: 700px) {
   .intro-photo { background-position: 52% center; opacity: .48; }
@@ -121,5 +123,5 @@ html { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   .screen-stage, .screen-stage.is-leaving, .auth-card, .dashboard-main, .admin-main, .app-shell, .admin-shell, .setup-page { animation: none; }
-  .intro-start, .story-about-button, .landing-cta, .intro-start span, .story-about-button span { transition: none; }
+  .intro-start, .story-about-button, .landing-cta, .about-back, .intro-start span, .story-about-button span { transition: none; }
 }

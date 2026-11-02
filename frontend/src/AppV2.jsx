@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import AdminWorkspace from './components/AdminWorkspace';
 import MaintenanceForm from './components/MaintenanceForm';
 import TicketTimeline from './components/TicketTimeline';
@@ -18,7 +18,7 @@ function Intro({ onStart }) {
   </main>;
 }
 
-function Landing({ openAuth }) {
+function Landing({ openAuth, backToWelcome }) {
   const scrollToAbout = () => document.getElementById('about-us')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   return <main className="landing-page">
     <section className="landing-hero">
@@ -27,7 +27,7 @@ function Landing({ openAuth }) {
     </section>
     <section className="about-section" id="about-us">
       <div className="landing-image landing-image-about" aria-hidden="true" />
-      <article className="about-copy"><p className="eyebrow">ABOUT APARTMENTHUB</p><h1>A simpler rhythm for shared living.</h1><p>ApartmentHub brings rent, leases, shared utilities and maintenance requests into one thoughtful space. Tenants can follow what matters at home, while administrators keep every record organised and easy to manage.</p><p>Built for clarity, connection and a little more calm in everyday rental life.</p><button className="landing-cta" onClick={openAuth}>Sign in or create an account →</button></article>
+      <article className="about-copy"><button className="about-back" onClick={backToWelcome}>← Back</button><p className="eyebrow">ABOUT APARTMENTHUB</p><h1>A simpler rhythm for shared living.</h1><p>ApartmentHub brings rent, leases, shared utilities and maintenance requests into one thoughtful space. Tenants can follow what matters at home, while administrators keep every record organised and easy to manage.</p><p>Built for clarity, connection and a little more calm in everyday rental life.</p><button className="landing-cta" onClick={openAuth}>Sign in or create an account →</button></article>
     </section>
   </main>;
 }
@@ -103,8 +103,21 @@ function AdminHome({ logout }) {
 }
 
 export default function AppV2() {
-  const [role, setRole] = useState(localStorage.getItem('apartmenthub_role')); const [setup, setSetup] = useState(false); const [screen, setScreen] = useState('intro'); const [leaving, setLeaving] = useState(false); const transitionTimer = useRef(null); const transitionLock = useRef(false); const token = localStorage.getItem('apartmenthub_token');
+  const [role, setRole] = useState(localStorage.getItem('apartmenthub_role')); const [setup, setSetup] = useState(false); const [screen, setScreen] = useState('intro'); const [leaving, setLeaving] = useState(false); const transitionTimer = useRef(null); const transitionLock = useRef(false); const pendingSection = useRef(null); const token = localStorage.getItem('apartmenthub_token');
   useEffect(() => () => clearTimeout(transitionTimer.current), []);
+  function jumpTo(top) {
+    const root = document.documentElement;
+    const oldBehavior = root.style.scrollBehavior;
+    root.style.scrollBehavior = 'auto';
+    window.scrollTo(0, top);
+    root.style.scrollBehavior = oldBehavior;
+  }
+  useLayoutEffect(() => {
+    if (screen !== 'landing' || pendingSection.current !== 'about-us') return;
+    const about = document.getElementById('about-us');
+    if (about) jumpTo(about.offsetTop);
+    pendingSection.current = null;
+  }, [screen]);
   function logout() {
     if (transitionLock.current) return;
     transitionLock.current = true;
@@ -113,7 +126,7 @@ export default function AppV2() {
     transitionTimer.current = setTimeout(() => {
       localStorage.removeItem('apartmenthub_token');
       localStorage.removeItem('apartmenthub_role');
-      window.scrollTo(0, 0);
+      jumpTo(0);
       setSetup(false);
       setScreen('auth');
       setRole(null);
@@ -121,20 +134,21 @@ export default function AppV2() {
       transitionLock.current = false;
     }, reducedMotion ? 0 : 300);
   }
-  function goTo(next) {
+  function goTo(next, section = null) {
     if (transitionLock.current || next === screen) return;
+    pendingSection.current = section;
     transitionLock.current = true;
     setLeaving(true);
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     transitionTimer.current = setTimeout(() => {
-      window.scrollTo(0, 0);
+      jumpTo(0);
       setScreen(next);
       setLeaving(false);
       transitionLock.current = false;
     }, reducedMotion ? 0 : 300);
   }
   if (!token || !role) return <div key={screen} className={`screen-stage${leaving ? ' is-leaving' : ''}`}>
-    {screen === 'intro' ? <Intro onStart={() => goTo('landing')} /> : screen === 'auth' ? <Auth onBack={() => goTo('intro')} onSuccess={(newRole, needsSetup) => { setRole(newRole); setSetup(needsSetup); }} /> : <Landing openAuth={() => goTo('auth')} />}
+    {screen === 'intro' ? <Intro onStart={() => goTo('landing')} /> : screen === 'auth' ? <Auth onBack={() => goTo('landing', 'about-us')} onSuccess={(newRole, needsSetup) => { setRole(newRole); setSetup(needsSetup); }} /> : <Landing openAuth={() => goTo('auth')} backToWelcome={() => goTo('intro')} />}
   </div>;
   let privatePage;
   if (setup && role === 'tenant') privatePage = <Setup done={() => setSetup(false)} />;
