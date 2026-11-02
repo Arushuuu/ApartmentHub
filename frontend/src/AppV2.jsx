@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import AdminWorkspace from './components/AdminWorkspace';
 import MaintenanceForm from './components/MaintenanceForm';
 import TicketTimeline from './components/TicketTimeline';
@@ -9,14 +9,21 @@ import { request } from './services/api';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value ?? 0);
 
+function Intro({ onStart }) {
+  return <main className="intro-page">
+    <div className="intro-photo" aria-hidden="true" />
+    <h1 className="intro-title">ApartmentHub</h1>
+    <div className="intro-credit">Arushi Shandilya<br />U25UV24T029019<br />CSE A 5th Sem</div>
+    <button className="intro-start" onClick={onStart}>Get Started <span aria-hidden="true">→</span></button>
+  </main>;
+}
+
 function Landing({ openAuth }) {
-  const scrollToAbout = () => document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth' });
+  const scrollToAbout = () => document.getElementById('about-us')?.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
   return <main className="landing-page">
     <section className="landing-hero">
       <div className="landing-image landing-image-hero" aria-hidden="true" />
-      <header className="landing-header"><div className="landing-brand"><strong>ApartmentHub</strong></div><button onClick={scrollToAbout}>About us ↓</button></header>
-      <div className="hero-quote"><p>“Home is not a place. It is a feeling of belonging.”</p></div>
-      <div className="student-credit">Arushi Shandilya<br />U25UV24T029019<br />CSE A · 5th Sem</div>
+      <div className="hero-quote"><p>“Home is not a place. It is a feeling of belonging.”</p><button className="story-about-button" onClick={scrollToAbout}>About us <span aria-hidden="true">↓</span></button></div>
     </section>
     <section className="about-section" id="about-us">
       <div className="landing-image landing-image-about" aria-hidden="true" />
@@ -36,7 +43,7 @@ function Auth({ onSuccess, onBack }) {
       localStorage.setItem('apartmenthub_token', login.access_token); localStorage.setItem('apartmenthub_role', login.role); onSuccess(login.role, mode === 'signup');
     } catch (e) { setError(e.message); } finally { setLoading(false); }
   }
-  return <main className="auth-shell"><section className="auth-story"><div className="brand"><span className="brand-mark">⌂</span> ApartmentHub</div><div><p className="eyebrow">ONE HOME, ONE PLACE</p><h1>Every rental<br />detail, connected.</h1></div></section><section className="auth-panel"><div className="auth-card"><button className="auth-back" onClick={onBack}>← Back to welcome</button><p className="eyebrow">WELCOME TO APARTMENTHUB</p><h2>{mode === 'login' ? 'Sign in' : 'Create a tenant account'}</h2><div className="role-picker">{['tenant','admin'].map(role => <button type="button" key={role} className={choice === role ? 'selected' : ''} onClick={() => setChoice(role)}><strong>{role}</strong></button>)}</div><form onSubmit={submit}>{mode === 'signup' && <><label>Full name<input name="name" required /></label><label>Date of birth<input name="dob" type="date" required /></label><label>Phone number<input name="phone" required /></label></>}<label>Email address<input name="email" type="email" required /></label><label>Password<input name="password" type="password" minLength="8" required /></label>{error && <p className="error">{error}</p>}<button className="primary" disabled={loading}>{loading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'} →</button></form><p className="switch">{mode === 'login' ? 'New tenant?' : 'Already have an account?'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>{mode === 'login' ? 'Create one' : 'Sign in'}</button></p></div></section></main>;
+  return <main className="auth-shell"><section className="auth-story"><div className="brand"><span className="brand-mark">⌂</span> ApartmentHub</div><div><p className="eyebrow">ONE HOME, ONE PLACE</p><h1>Every rental<br />detail, connected.</h1></div></section><section className="auth-panel"><div className="auth-card" key={mode}><button className="auth-back" onClick={onBack}>← Back</button><p className="eyebrow">WELCOME TO APARTMENTHUB</p><h2>{mode === 'login' ? 'Sign in' : 'Create a tenant account'}</h2><div className="role-picker">{['tenant','admin'].map(role => <button type="button" key={role} className={choice === role ? 'selected' : ''} onClick={() => setChoice(role)}><strong>{role}</strong></button>)}</div><form onSubmit={submit}>{mode === 'signup' && <><label>Full name<input name="name" required /></label><label>Date of birth<input name="dob" type="date" required /></label><label>Phone number<input name="phone" required /></label></>}<label>Email address<input name="email" type="email" required /></label><label>Password<input name="password" type="password" minLength="8" required /></label>{error && <p className="error">{error}</p>}<button className="primary" disabled={loading}>{loading ? 'Please wait...' : mode === 'login' ? 'Sign in' : 'Create account'} →</button></form><p className="switch">{mode === 'login' ? 'New tenant?' : 'Already have an account?'} <button type="button" onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setError(''); }}>{mode === 'login' ? 'Create one' : 'Sign in'}</button></p></div></section></main>;
 }
 
 function Setup({ done, embedded = false }) {
@@ -46,7 +53,7 @@ function Setup({ done, embedded = false }) {
   return embedded ? card : <main className="setup-page">{card}</main>;
 }
 
-function Shell({ title, tabs, active, setActive, children, logout }) { return <div className="app-shell"><aside><div className="brand"><span className="brand-mark">⌂</span>{title}</div><nav>{tabs.map(([id,label]) => <button key={id} className={active === id ? 'active' : ''} onClick={() => setActive(id)}>{label}</button>)}</nav><div className="side-foot"><button onClick={logout}>Sign out</button></div></aside><main className="dashboard-main">{children}</main></div>; }
+function Shell({ title, tabs, active, setActive, children, logout }) { return <div className="app-shell"><aside><div className="brand"><span className="brand-mark">⌂</span>{title}</div><nav>{tabs.map(([id,label]) => <button key={id} className={active === id ? 'active' : ''} onClick={() => setActive(id)}>{label}</button>)}</nav><div className="side-foot"><button onClick={logout}>Sign out</button></div></aside><main className="dashboard-main" key={active}>{children}</main></div>; }
 function Empty({ text }) { return <div className="empty">⌂<p>{text}</p></div>; }
 
 function TenantHome({ logout }) {
@@ -96,10 +103,43 @@ function AdminHome({ logout }) {
 }
 
 export default function AppV2() {
-  const [role, setRole] = useState(localStorage.getItem('apartmenthub_role')); const [setup, setSetup] = useState(false); const [screen, setScreen] = useState('landing'); const token = localStorage.getItem('apartmenthub_token'); const logout = () => { localStorage.clear(); location.reload(); };
-  if (!token || !role) return screen === 'auth' ? <Auth onBack={() => setScreen('landing')} onSuccess={(newRole, needsSetup) => { setRole(newRole); setSetup(needsSetup); }} /> : <Landing openAuth={() => setScreen('auth')} />;
-  if (setup && role === 'tenant') return <Setup done={() => setSetup(false)} />;
-  if (role === 'admin') return <AdminWorkspace logout={logout} />;
-  if (role === 'landlord') return <Shell title="ApartmentHub Landlord" tabs={[]} active="" setActive={() => {}} logout={logout}><article className="panel"><p className="eyebrow">COMING SOON</p><h1>Landlord workspace</h1><p className="muted">Maintenance ticket handling will be added here next.</p></article></Shell>;
-  return <TenantHome logout={logout} />;
+  const [role, setRole] = useState(localStorage.getItem('apartmenthub_role')); const [setup, setSetup] = useState(false); const [screen, setScreen] = useState('intro'); const [leaving, setLeaving] = useState(false); const transitionTimer = useRef(null); const transitionLock = useRef(false); const token = localStorage.getItem('apartmenthub_token');
+  useEffect(() => () => clearTimeout(transitionTimer.current), []);
+  function logout() {
+    if (transitionLock.current) return;
+    transitionLock.current = true;
+    setLeaving(true);
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    transitionTimer.current = setTimeout(() => {
+      localStorage.removeItem('apartmenthub_token');
+      localStorage.removeItem('apartmenthub_role');
+      window.scrollTo(0, 0);
+      setSetup(false);
+      setScreen('auth');
+      setRole(null);
+      setLeaving(false);
+      transitionLock.current = false;
+    }, reducedMotion ? 0 : 300);
+  }
+  function goTo(next) {
+    if (transitionLock.current || next === screen) return;
+    transitionLock.current = true;
+    setLeaving(true);
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    transitionTimer.current = setTimeout(() => {
+      window.scrollTo(0, 0);
+      setScreen(next);
+      setLeaving(false);
+      transitionLock.current = false;
+    }, reducedMotion ? 0 : 300);
+  }
+  if (!token || !role) return <div key={screen} className={`screen-stage${leaving ? ' is-leaving' : ''}`}>
+    {screen === 'intro' ? <Intro onStart={() => goTo('landing')} /> : screen === 'auth' ? <Auth onBack={() => goTo('intro')} onSuccess={(newRole, needsSetup) => { setRole(newRole); setSetup(needsSetup); }} /> : <Landing openAuth={() => goTo('auth')} />}
+  </div>;
+  let privatePage;
+  if (setup && role === 'tenant') privatePage = <Setup done={() => setSetup(false)} />;
+  else if (role === 'admin') privatePage = <AdminWorkspace logout={logout} />;
+  else if (role === 'landlord') privatePage = <Shell title="ApartmentHub Landlord" tabs={[]} active="" setActive={() => {}} logout={logout}><article className="panel"><p className="eyebrow">COMING SOON</p><h1>Landlord workspace</h1><p className="muted">Maintenance ticket handling will be added here next.</p></article></Shell>;
+  else privatePage = <TenantHome logout={logout} />;
+  return <div className={`screen-stage${leaving ? ' is-leaving' : ''}`}>{privatePage}</div>;
 }
