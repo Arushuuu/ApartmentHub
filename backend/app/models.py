@@ -99,6 +99,21 @@ class BillSplitShare(Base):
 
     bill = relationship("UtilityBill", back_populates="shares")
     tenant = relationship("Tenant", back_populates="bill_shares")
+    ledger = relationship("UtilityPaymentLog", back_populates="share", cascade="all, delete-orphan", order_by="UtilityPaymentLog.log_id")
+
+
+class UtilityPaymentLog(Base):
+    __tablename__ = "utility_payment_logs"
+
+    log_id = Column(Integer, primary_key=True, index=True)
+    share_id = Column(Integer, ForeignKey("bill_split_shares.share_id", ondelete="CASCADE"), nullable=False)
+    previous_status = Column(String(30), nullable=True)
+    new_status = Column(String(30), nullable=False)
+    recorded_by = Column(String(100), nullable=False)
+    note = Column(String(500), nullable=False)
+    created_at = Column(DateTime, server_default=func.now(), nullable=False)
+
+    share = relationship("BillSplitShare", back_populates="ledger")
 
 
 class MaintenanceTicket(Base):

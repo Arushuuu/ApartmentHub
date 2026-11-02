@@ -1,4 +1,4 @@
-"""Add 20 idempotent demo tenant records for the ApartmentHub presentation.
+"""Add 30 idempotent demo tenant records for the ApartmentHub presentation.
 
 Run from the backend folder with the virtual-environment Python executable.
 
@@ -6,7 +6,7 @@ Every demo tenant uses the password stored in DEMO_PASSWORD below. Existing
 emails are left unchanged, so re-running this file never creates duplicates.
 """
 
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 
 from app.database import SessionLocal
@@ -36,6 +36,16 @@ DEMO_TENANTS = [
     ("Anika Sethi", "anika.sethi@apartmenthub.demo", "9000100018"),
     ("Siddharth Jain", "siddharth.jain@apartmenthub.demo", "9000100019"),
     ("Zoya Khan", "zoya.khan@apartmenthub.demo", "9000100020"),
+    ("Diya Chawla", "diya.chawla@apartmenthub.demo", "9000100021"),
+    ("Aarav Patel", "aarav.patel@apartmenthub.demo", "9000100022"),
+    ("Sana Mirza", "sana.mirza@apartmenthub.demo", "9000100023"),
+    ("Krish Arora", "krish.arora@apartmenthub.demo", "9000100024"),
+    ("Naina Saxena", "naina.saxena@apartmenthub.demo", "9000100025"),
+    ("Om Prakash", "om.prakash@apartmenthub.demo", "9000100026"),
+    ("Tara Mukherjee", "tara.mukherjee@apartmenthub.demo", "9000100027"),
+    ("Reyansh Suri", "reyansh.suri@apartmenthub.demo", "9000100028"),
+    ("Anjali Desai", "anjali.desai@apartmenthub.demo", "9000100029"),
+    ("Mihir Kulkarni", "mihir.kulkarni@apartmenthub.demo", "9000100030"),
 ]
 
 TICKET_CATEGORIES = ["Plumbing", "Electrical", "Appliance", "Cleaning"]
@@ -50,6 +60,9 @@ TICKET_DESCRIPTIONS = [
 def main():
     db = SessionLocal()
     created = 0
+    new_leases = []
+    billing_month = date.today().replace(day=1)
+    lease_end = date(billing_month.year + 1, billing_month.month, 1) - timedelta(days=1)
     try:
         password_hash = get_password_hash(DEMO_PASSWORD)
         for index, (name, email, phone) in enumerate(DEMO_TENANTS, start=1):
@@ -80,12 +93,13 @@ def main():
             lease = LeaseAgreement(
                 unit_id=unit.unit_id,
                 tenant_id=tenant.tenant_id,
-                start_date=date(2026, 1, 1),
-                end_date=date(2026, 12, 31),
+                start_date=billing_month,
+                end_date=lease_end,
                 monthly_rent=rent,
             )
             db.add(lease)
             db.flush()
+            new_leases.append(lease)
             db.add(SecurityDeposit(lease_id=lease.lease_id, amount_held=rent * 2, refund_status="Held"))
 
             # Give half the tenants a visible utility bill and every other
@@ -94,8 +108,8 @@ def main():
                 bill = UtilityBill(
                     unit_id=unit.unit_id,
                     total_amount=Decimal("1600") + Decimal(index * 25),
-                    bill_date=date(2026, 10, 1),
-                    due_date=date(2026, 10, 20),
+                    bill_date=billing_month,
+                    due_date=billing_month.replace(day=20),
                 )
                 db.add(bill)
                 db.flush()
@@ -112,24 +126,17 @@ def main():
                 ))
             created += 1
 
-        # A rent-payment row is tracked per active lease for the current demo
-        # month. The mix of statuses makes the admin percentage meaningful.
+        # Add rent records only for the tenants created in this run. Existing
+        # tenants' payment records must not be changed by a later seed run.
         rent_rows = 0
-        billing_month = date(2026, 10, 1)
-        for lease in db.query(LeaseAgreement).all():
-            exists = db.query(RentPayment).filter(
-                RentPayment.lease_id == lease.lease_id,
-                RentPayment.billing_month == billing_month,
-            ).first()
-            if exists:
-                continue
+        for lease in new_leases:
             paid = lease.lease_id % 3 != 0
             db.add(RentPayment(
                 lease_id=lease.lease_id,
                 billing_month=billing_month,
                 amount=lease.monthly_rent,
                 payment_status="Paid" if paid else "Pending",
-                paid_on=date(2026, 10, 5) if paid else None,
+                paid_on=billing_month.replace(day=2) if paid else None,
             ))
             rent_rows += 1
 

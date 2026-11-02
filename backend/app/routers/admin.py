@@ -1,6 +1,6 @@
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field
@@ -9,8 +9,9 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, RentPayment, SecurityDeposit, Tenant, TicketUpdateLog, UtilityBill
+from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, RentPayment, SecurityDeposit, Tenant, TicketUpdateLog, UtilityBill, UtilityPaymentLog
 from app.routers.auth import account_role, get_current_tenant, get_password_hash
+from app.utility_ledger import bill_view, change_share_status, share_view
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
@@ -31,12 +32,30 @@ class TenantUpdateInput(BaseModel):
 class CloseTicketInput(BaseModel):
     update_message: str = Field(default="Closed by administrator", min_length=1, max_length=1000)
 
+class AdminTicketCreateInput(BaseModel):
+    tenant_id: int = Field(gt=0)
+    unit_id: int | None = Field(default=None, gt=0)
+    category: str = Field(min_length=1, max_length=50)
+    description: str = Field(min_length=10)
+
+class UtilityBillCreateInput(BaseModel):
+    unit_id: int = Field(gt=0)
+    total_amount: Decimal = Field(gt=0, max_digits=10, decimal_places=2)
+    bill_date: date
+    due_date: date
+
+class UtilityStatusInput(BaseModel):
+    payment_status: Literal["Paid", "Unpaid"]
+    note: str = Field(default="", max_length=500)
+
 RESOURCES = {
     "tenants": Tenant, "apartment_units": ApartmentUnit, "lease_agreements": LeaseAgreement,
     "security_deposits": SecurityDeposit, "rent_payments": RentPayment, "utility_bills": UtilityBill,
-    "bill_split_shares": BillSplitShare, "maintenance_tickets": MaintenanceTicket,
+    "bill_split_shares": BillSplitShare, "utility_payment_logs": UtilityPaymentLog,
+    "maintenance_tickets": MaintenanceTicket,
     "ticket_update_logs": TicketUpdateLog,
 }
+UTILITY_LEDGER_MODELS = (UtilityBill, BillSplitShare, UtilityPaymentLog)
 
 def require_admin(current_tenant=Depends(get_current_tenant)):
     if account_role(current_tenant) != "admin":
@@ -149,13 +168,8 @@ def delete_user(tenant_id: int, db: Session = Depends(get_db), current_admin: Te
     except Exception as error:
         db.rollback(); raise HTTPException(status_code=400, detail=f"User deletion failed: {str(error).splitlines()[0]}")
 
-@router.get("/tickets/active")
-def active_tickets(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
-    tickets = (db.query(MaintenanceTicket)
-        .filter(MaintenanceTicket.status.in_(["Open", "In Progress"]))
-        .order_by(MaintenanceTicket.created_at.desc())
-        .all())
-    return [{
+def ticket_view(ticket: MaintenanceTicket) -> dict[str, Any]:
+    return {
         "ticket_id": ticket.ticket_id,
         "tenant_id": ticket.tenant_id,
         "tenant_name": ticket.tenant.tenant_name,
@@ -165,7 +179,22 @@ def active_tickets(db: Session = Depends(get_db), _: Tenant = Depends(require_ad
         "description": ticket.description,
         "status": ticket.status,
         "created_at": ticket.created_at,
-    } for ticket in tickets]
+    }
+
+@router.get("/tickets")
+def list_tickets(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    tickets = (db.query(MaintenanceTicket)
+        .order_by(MaintenanceTicket.created_at.desc(), MaintenanceTicket.ticket_id.desc())
+        .all())
+    return [ticket_view(ticket) for ticket in tickets]
+
+@router.get("/tickets/active")
+def active_tickets(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    tickets = (db.query(MaintenanceTicket)
+        .filter(MaintenanceTicket.status.in_(["Open", "In Progress"]))
+        .order_by(MaintenanceTicket.created_at.desc(), MaintenanceTicket.ticket_id.desc())
+        .all())
+    return [ticket_view(ticket) for ticket in tickets]
 
 @router.get("/tickets/summary")
 def ticket_summary(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
@@ -181,6 +210,105 @@ def ticket_summary(db: Session = Depends(get_db), _: Tenant = Depends(require_ad
             for category, count in rows
         ],
     }
+
+@router.post("/tickets", status_code=status.HTTP_201_CREATED)
+def create_admin_ticket(payload: AdminTicketCreateInput, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    tenant = db.get(Tenant, payload.tenant_id)
+    if tenant is None:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    unit_id = payload.unit_id
+    if unit_id is None:
+        lease = (db.query(LeaseAgreement)
+            .filter(LeaseAgreement.tenant_id == tenant.tenant_id)
+            .order_by(LeaseAgreement.end_date.desc(), LeaseAgreement.lease_id.desc())
+            .first())
+        unit_id = lease.unit_id if lease else None
+    if unit_id is None or db.get(ApartmentUnit, unit_id) is None:
+        raise HTTPException(status_code=400, detail="Select a tenant with a lease or enter a valid unit ID")
+    ticket = MaintenanceTicket(
+        tenant_id=tenant.tenant_id,
+        unit_id=unit_id,
+        category=payload.category.strip(),
+        description=payload.description.strip(),
+        status="Open",
+    )
+    db.add(ticket)
+    db.commit()
+    db.refresh(ticket)
+    return ticket_view(ticket)
+
+@router.delete("/tickets/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_ticket(ticket_id: int, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    ticket = db.get(MaintenanceTicket, ticket_id)
+    if ticket is None:
+        raise HTTPException(status_code=404, detail="Maintenance ticket not found")
+    db.delete(ticket)
+    db.commit()
+
+@router.get("/utility-bills")
+def list_utility_bills(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
+    bills = (db.query(UtilityBill)
+        .order_by(UtilityBill.bill_date.desc(), UtilityBill.bill_id.desc())
+        .all())
+    return [bill_view(bill) for bill in bills]
+
+@router.post("/utility-bills", status_code=status.HTTP_201_CREATED)
+def create_utility_bill(payload: UtilityBillCreateInput, db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):
+    if db.get(ApartmentUnit, payload.unit_id) is None:
+        raise HTTPException(status_code=404, detail="Apartment unit not found")
+    if payload.due_date < payload.bill_date:
+        raise HTTPException(status_code=400, detail="Due date must be on or after bill date")
+    tenant_ids = [tenant_id for (tenant_id,) in (db.query(LeaseAgreement.tenant_id)
+        .filter(LeaseAgreement.unit_id == payload.unit_id,
+                LeaseAgreement.start_date <= payload.bill_date,
+                LeaseAgreement.end_date >= payload.bill_date)
+        .distinct()
+        .order_by(LeaseAgreement.tenant_id)
+        .all())]
+    if not tenant_ids:
+        raise HTTPException(status_code=400, detail="No tenants have an active lease for this unit on the bill date")
+    total_cents = int(payload.total_amount * 100)
+    if total_cents < len(tenant_ids):
+        raise HTTPException(status_code=400, detail="Bill amount is too small to split among these tenants")
+    each_cents, extra_cents = divmod(total_cents, len(tenant_ids))
+    bill = UtilityBill(unit_id=payload.unit_id, total_amount=payload.total_amount,
+                       bill_date=payload.bill_date, due_date=payload.due_date)
+    try:
+        db.add(bill)
+        db.flush()
+        for index, tenant_id in enumerate(tenant_ids):
+            share = BillSplitShare(
+                bill_id=bill.bill_id, tenant_id=tenant_id,
+                owed_amt=Decimal(each_cents + (1 if index < extra_cents else 0)) / 100,
+                payment_status="Unpaid",
+            )
+            db.add(share)
+            db.flush()
+            db.add(UtilityPaymentLog(
+                share_id=share.share_id, previous_status=None, new_status="Unpaid",
+                recorded_by=current_admin.tenant_name,
+                note=f"Bill created; split equally among {len(tenant_ids)} tenant(s)",
+            ))
+        db.commit()
+        db.refresh(bill)
+    except Exception:
+        db.rollback()
+        raise
+    return bill_view(bill)
+
+@router.patch("/utility-shares/{share_id}/status")
+def update_utility_share_status(share_id: int, payload: UtilityStatusInput,
+                                db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):
+    share = db.get(BillSplitShare, share_id)
+    if share is None:
+        raise HTTPException(status_code=404, detail="Utility share not found")
+    if share.payment_status == payload.payment_status:
+        raise HTTPException(status_code=409, detail="Share already has that payment status")
+    note = payload.note.strip() or ("Payment verified by admin" if payload.payment_status == "Paid" else "Payment returned to unpaid by admin")
+    change_share_status(db, share, payload.payment_status, current_admin.tenant_name, note)
+    db.commit()
+    db.refresh(share)
+    return share_view(share)
 
 @router.patch("/tickets/{ticket_id}/close")
 def close_ticket(ticket_id: int, payload: CloseTicketInput, db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):
@@ -202,6 +330,8 @@ def list_records(resource: str, db: Session = Depends(get_db), _: Tenant = Depen
 @router.post("/{resource}", status_code=status.HTTP_201_CREATED)
 def create_record(resource: str, payload: dict[str, Any], db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
     model = model_for(resource)
+    if model in UTILITY_LEDGER_MODELS:
+        raise HTTPException(status_code=400, detail="Use the utility bill workflow to keep shares and payment history in sync")
     values = clean_values(model, payload, creating=True)
     if model is Tenant and "password_hash" not in values:
         raise HTTPException(status_code=400, detail="A password is required when creating a tenant")
@@ -216,6 +346,8 @@ def create_record(resource: str, payload: dict[str, Any], db: Session = Depends(
 @router.patch("/{resource}/{record_id}")
 def update_record(resource: str, record_id: int, payload: dict[str, Any], db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
     model = model_for(resource)
+    if model in UTILITY_LEDGER_MODELS:
+        raise HTTPException(status_code=400, detail="Use the utility bill workflow to keep shares and payment history in sync")
     record = db.get(model, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -230,6 +362,8 @@ def update_record(resource: str, record_id: int, payload: dict[str, Any], db: Se
 @router.delete("/{resource}/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_record(resource: str, record_id: int, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
     model = model_for(resource)
+    if model in UTILITY_LEDGER_MODELS:
+        raise HTTPException(status_code=400, detail="Use the utility bill workflow to keep shares and payment history in sync")
     record = db.get(model, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")

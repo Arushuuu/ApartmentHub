@@ -6,6 +6,7 @@ export async function request(path, options = {}) {
   const token = localStorage.getItem('apartmenthub_token');
   const response = await fetch(`${API_URL}${path}`, {
     ...options,
+    cache: options.cache ?? 'no-store',
     headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(options.headers ?? {}) },
   });
   if (!response.ok) {

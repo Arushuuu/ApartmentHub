@@ -10,7 +10,10 @@ router = APIRouter(prefix="/tickets", tags=["Maintenance"])
 
 @router.get("/me", response_model=list[TicketResponse])
 def my_tickets(current_tenant=Depends(get_current_tenant), db: Session = Depends(get_db)):
-    return db.query(MaintenanceTicket).filter(MaintenanceTicket.tenant_id == current_tenant.tenant_id).order_by(MaintenanceTicket.created_at.desc()).all()
+    return (db.query(MaintenanceTicket)
+        .filter(MaintenanceTicket.tenant_id == current_tenant.tenant_id)
+        .order_by(MaintenanceTicket.created_at.desc(), MaintenanceTicket.ticket_id.desc())
+        .all())
 
 @router.post("", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
 def create_ticket(payload: TicketCreate, current_tenant=Depends(get_current_tenant), db: Session = Depends(get_db)):

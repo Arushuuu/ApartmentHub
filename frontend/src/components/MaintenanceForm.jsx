@@ -10,8 +10,8 @@ export default function MaintenanceForm({ onCreated }) {
   async function submit(event) {
     event.preventDefault(); setSaving(true); setMessage('');
     try {
-      await request('/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unit_id: values.unit_id ? Number(values.unit_id) : null, category: values.category, description: values.description }) });
-      setValues({ unit_id: '', category: '', description: '' }); setMessage('Maintenance ticket created successfully.'); onCreated?.();
+      const created = await request('/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ unit_id: values.unit_id ? Number(values.unit_id) : null, category: values.category, description: values.description }) });
+      setValues({ unit_id: '', category: '', description: '' }); setMessage('Maintenance ticket created successfully.'); onCreated?.(created);
     } catch (error) { setMessage(error.message); } finally { setSaving(false); }
   }
 

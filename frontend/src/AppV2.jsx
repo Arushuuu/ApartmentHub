@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import AdminWorkspace from './components/AdminWorkspace';
 import MaintenanceForm from './components/MaintenanceForm';
+import TenantUtilities from './components/TenantUtilities';
 import { request } from './services/api';
 
-const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(value ?? 0);
+const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 2 }).format(value ?? 0);
 
 function Landing({ openAuth }) {
   const scrollToAbout = () => document.getElementById('about-us')?.scrollIntoView({ behavior: 'smooth' });
@@ -47,12 +48,39 @@ function Empty({ text }) { return <div className="empty">⌂<p>{text}</p></div>;
 
 function TenantHome({ logout }) {
   const [tab, setTab] = useState('home'); const [data, setData] = useState({}); const [tickets, setTickets] = useState([]); const [leases, setLeases] = useState([]); const [shares, setShares] = useState([]); const [error, setError] = useState('');
-  const load = async () => { try { const [d,t,l,s] = await Promise.all([request('/account/dashboard'),request('/tickets/me'),request('/leases/me'),request('/utilities/me')]); setData(d); setTickets(t); setLeases(l); setShares(s); } catch(e) { setError(e.message); } };
-  useEffect(() => { load(); }, []);
+  const load = async () => {
+    const [dashboard, ticketRows, leaseRows, shareRows] = await Promise.allSettled([
+      request('/account/dashboard'), request('/tickets/me'), request('/leases/me'), request('/utilities/me'),
+    ]);
+    if (dashboard.status === 'fulfilled') setData(dashboard.value);
+    if (ticketRows.status === 'fulfilled') setTickets(ticketRows.value);
+    if (leaseRows.status === 'fulfilled') setLeases(leaseRows.value);
+    if (shareRows.status === 'fulfilled') setShares(shareRows.value);
+    const failures = [dashboard, ticketRows, leaseRows, shareRows].filter(result => result.status === 'rejected');
+    setError(failures.map(result => result.reason.message).join(' '));
+  };
+  useEffect(() => { load(); }, [tab]);
+  useEffect(() => {
+    if (tab !== 'home') return;
+    const interval = setInterval(load, 10000);
+    window.addEventListener('focus', load);
+    return () => { clearInterval(interval); window.removeEventListener('focus', load); };
+  }, [tab]);
   const profileComplete = leases.length > 0;
-  const tenantTabs = [['home','Overview'],['tickets','Maintenance'],['lease','My lease']];
+  const tenantTabs = [['home','Overview'],['tickets','Maintenance'],['utilities','Utilities'],['lease','My lease']];
   if (!profileComplete) tenantTabs.push(['profile','Profile setup']);
-  return <Shell title="ApartmentHub" tabs={tenantTabs} active={tab} setActive={setTab} logout={logout}>{error && <p className="error banner">{error}</p>}{tab === 'home' && <><section className="welcome"><div><p className="eyebrow">YOUR HOME AT A GLANCE</p><h1>Hello, {data.tenant_name ?? 'there'}.</h1><p className="muted">Your apartment details, in one calm place.</p></div></section><section className="stats"><article><p>Monthly rent</p><strong>{money(data.monthly_rent)}</strong></article><article><p>Utilities due</p><strong>{money(data.utilities_due)}</strong></article><article><p>Open requests</p><strong>{data.open_tickets ?? 0}</strong></article></section><section className="two-column"><article className="panel"><p className="eyebrow">RECENT BILLS</p>{shares.slice(0,3).map(s => <div className="line-item" key={s.share_id}><span>Utility bill</span><strong>{money(s.owed_amt)}</strong><span className="badge unpaid">{s.payment_status}</span></div>)}{!shares.length && <Empty text="No utility bills assigned yet." />}</article><article className="panel warm"><p className="eyebrow">MAINTENANCE</p><h2>{tickets[0]?.category ?? 'All clear'}</h2><p className="muted">{tickets[0]?.description ?? 'Create a ticket whenever something needs attention.'}</p></article></section></>}{tab === 'tickets' && <><div className="page-title"><div><p className="eyebrow">HOME CARE</p><h1>Maintenance requests</h1><p className="muted">Every submission adds a ticket for your own tenant ID.</p></div></div><MaintenanceForm onCreated={load} /><article className="panel">{tickets.map(t => <div className="ticket-row" key={t.ticket_id}><div><strong>{t.category}</strong><p>{t.description}</p><small>Ticket #{t.ticket_id}</small></div><span className="badge unpaid">{t.status}</span></div>)}{!tickets.length && <Empty text="No maintenance tickets yet." />}</article></>}{tab === 'lease' && <><div className="page-title"><div><p className="eyebrow">YOUR HOME</p><h1>Lease details</h1></div></div>{leases.map(l => <article className="lease-card" key={l.lease_id}><h2>Apartment lease</h2><div><span><small>Monthly rent</small><strong>{money(l.monthly_rent)}</strong></span><span><small>Starts</small><strong>{l.start_date}</strong></span><span><small>Ends</small><strong>{l.end_date}</strong></span></div></article>)}{!leases.length && <Empty text="No lease linked yet. Use Profile setup to add one." />}</>}{tab === 'profile' && !profileComplete && <><div className="page-title"><div><p className="eyebrow">YOUR PROFILE</p><h1>Complete rental details</h1><p className="muted">You can safely add the optional apartment and lease information whenever you are ready.</p></div></div><Setup embedded done={() => setTab('home')} /></>}</Shell>;
+  return <Shell title="ApartmentHub" tabs={tenantTabs} active={tab} setActive={setTab} logout={logout}>
+    {error && <p className="error banner">{error}</p>}
+    {tab === 'home' && <>
+      <section className="welcome"><div><p className="eyebrow">YOUR HOME AT A GLANCE</p><h1>Hello, {data.tenant_name ?? 'there'}.</h1><p className="muted">Your apartment details, in one calm place.</p></div></section>
+      <section className="stats"><article><p>Monthly rent</p><strong>{money(data.monthly_rent)}</strong></article><article><p>Utilities due</p><strong>{money(data.utilities_due)}</strong></article><article><p>Open requests</p><strong>{data.open_tickets ?? 0}</strong></article></section>
+      <section className="two-column"><article className="panel"><p className="eyebrow">RECENT BILLS</p>{shares.slice(0,3).map(s => <div className="line-item" key={s.share_id}><span>Utility bill</span><strong>{money(s.owed_amt)}</strong><span className={`badge ${s.payment_status === 'Paid' ? 'paid' : s.payment_status === 'Pending Verification' ? 'pending-verification' : 'unpaid'}`}>{s.payment_status}</span></div>)}{!shares.length && <Empty text="No utility bills assigned yet." />}</article><article className="panel warm"><p className="eyebrow">MAINTENANCE</p><h2>{tickets[0]?.category ?? 'All clear'}</h2><p className="muted">{tickets[0]?.description ?? 'Create a ticket whenever something needs attention.'}</p></article></section>
+    </>}
+    {tab === 'tickets' && <><div className="page-title"><div><p className="eyebrow">HOME CARE</p><h1>Maintenance requests</h1><p className="muted">Every submission adds a ticket for your own tenant ID.</p></div></div><MaintenanceForm onCreated={load} /><article className="panel">{tickets.map(t => <div className="ticket-row" key={t.ticket_id}><div><strong>{t.category}</strong><p>{t.description}</p><small>Ticket #{t.ticket_id}</small></div><span className="badge unpaid">{t.status}</span></div>)}{!tickets.length && <Empty text="No maintenance tickets yet." />}</article></>}
+    {tab === 'utilities' && <TenantUtilities shares={shares} onRefresh={load} />}
+    {tab === 'lease' && <><div className="page-title"><div><p className="eyebrow">YOUR HOME</p><h1>Lease details</h1></div></div>{leases.map(l => <article className="lease-card" key={l.lease_id}><h2>Apartment lease</h2><div><span><small>Monthly rent</small><strong>{money(l.monthly_rent)}</strong></span><span><small>Starts</small><strong>{l.start_date}</strong></span><span><small>Ends</small><strong>{l.end_date}</strong></span></div></article>)}{!leases.length && <Empty text="No lease linked yet. Use Profile setup to add one." />}</>}
+    {tab === 'profile' && !profileComplete && <><div className="page-title"><div><p className="eyebrow">YOUR PROFILE</p><h1>Complete rental details</h1><p className="muted">You can safely add the optional apartment and lease information whenever you are ready.</p></div></div><Setup embedded done={() => setTab('home')} /></>}
+  </Shell>;
 }
 
 function AdminHome({ logout }) {

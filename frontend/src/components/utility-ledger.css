@@ -1,0 +1,22 @@
+.utility-ledger-page,.tenant-utilities{display:grid;gap:18px}
+.utility-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px}
+.utility-summary article{background:#fffaf5;border:1px solid #eadfd6;border-radius:16px;padding:17px;display:grid;gap:3px}
+.utility-summary strong{font-size:27px;color:#5d3b4b}.utility-summary span{font-size:12px;font-weight:800;color:#725b65}
+.utility-create-form{display:grid;gap:18px;margin:0}.utility-create-form h2{margin:0}
+.utility-create-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.utility-bill-list,.tenant-utility-list{display:grid;gap:16px}
+.utility-bill-card,.tenant-utility-card{display:grid;gap:18px}
+.utility-bill-head{display:flex;justify-content:space-between;align-items:start;gap:20px}
+.utility-bill-head h2{margin:0 0 5px}.utility-bill-head>strong{font-size:24px;color:#85586f;white-space:nowrap}
+.utility-share-list{display:grid;gap:8px}.utility-share{background:#f8ede3;border-radius:13px;padding:14px;display:grid;gap:12px}
+.utility-share-main{display:flex;align-items:center;gap:15px;flex-wrap:wrap}.utility-share-main>div{display:grid;gap:2px;margin-right:auto}.utility-share-main small{color:#725b65;font-size:11px}.utility-share-main>strong{color:#5d3b4b}
+.utility-share-actions{display:flex;gap:8px;flex-wrap:wrap}.utility-share-actions button:disabled{opacity:.55;cursor:wait}
+.utility-history{border-top:1px solid #dfd3c3;padding-top:8px;color:#725b65;font-size:12px}
+.utility-history summary{cursor:pointer;font-weight:900;color:#85586f}.utility-history ol{margin:10px 0 0;padding-left:23px;display:grid;gap:9px}
+.utility-history li{line-height:1.4}.utility-history li strong{color:#5d3b4b}.utility-history li small{display:block;color:#907b85}
+.utility-tenant-balance{display:flex;align-items:center;justify-content:space-between;gap:18px;background:#dfd3c3;color:#5d3b4b;font-weight:800}
+.utility-tenant-balance strong{font-size:24px}.tenant-utility-foot{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.tenant-utility-foot .primary{margin-left:auto}.tenant-utility-foot .muted{font-size:12px}
+@media(max-width:700px){.utility-summary,.utility-create-fields{grid-template-columns:repeat(2,minmax(0,1fr))}.utility-bill-head{flex-wrap:wrap}.utility-bill-head>strong{font-size:21px}}
+@media(max-width:480px){.utility-create-fields{grid-template-columns:1fr}.utility-tenant-balance{align-items:flex-start;flex-direction:column}}
+@media(max-width:760px){.app-shell aside nav button{font-size:12px;white-space:nowrap}}
