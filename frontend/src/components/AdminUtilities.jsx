@@ -20,13 +20,19 @@ export default function AdminUtilities() {
     catch (caught) { setError(caught.message); }
   }, []);
 
+  const refreshAll = useCallback(async () => {
+    await Promise.all([
+      loadBills(),
+      request('/admin/apartment_units').then(setUnits).catch(caught => setError(caught.message)),
+    ]);
+  }, [loadBills]);
+
   useEffect(() => {
-    loadBills();
-    request('/admin/apartment_units').then(setUnits).catch(caught => setError(caught.message));
+    refreshAll();
     const interval = setInterval(loadBills, 10000);
     window.addEventListener('focus', loadBills);
     return () => { clearInterval(interval); window.removeEventListener('focus', loadBills); };
-  }, [loadBills]);
+  }, [loadBills, refreshAll]);
 
   async function createBill(event) {
     event.preventDefault(); setBusy(true); setMessage(''); setError('');
@@ -58,7 +64,7 @@ export default function AdminUtilities() {
   const pendingCount = allShares.filter(share => share.payment_status === 'Pending Verification').length;
 
   return <section className="utility-ledger-page">
-    <div className="admin-title"><div><p className="eyebrow">SHARED LIVING</p><h1>Utility bills & ledger</h1><p className="muted">Split each bill equally across tenants with an active lease on its bill date. Changes appear automatically within 10 seconds.</p></div><button className="soft-button" onClick={loadBills}>Refresh</button></div>
+    <div className="admin-title"><div><p className="eyebrow">SHARED LIVING</p><h1>Utility bills & ledger</h1><p className="muted">Split each bill equally across tenants with an active lease on its bill date. Changes appear automatically within 10 seconds.</p></div><button type="button" className="soft-button" onClick={refreshAll}>Refresh</button></div>
     <div className="utility-summary"><article><strong>{bills.length}</strong><span>Bills</span></article><article><strong>{allShares.length}</strong><span>Tenant shares</span></article><article><strong>{paidCount}</strong><span>Paid</span></article><article><strong>{pendingCount}</strong><span>To verify</span></article></div>
     <form className="panel utility-create-form" onSubmit={createBill}>
       <div><p className="eyebrow">NEW UTILITY BILL</p><h2>Split a bill</h2></div>

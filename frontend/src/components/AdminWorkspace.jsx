@@ -9,15 +9,19 @@ import './admin-tickets.css';
 
 const blankUser = { tenant_name: '', t_email: '', t_dob: '', t_phone_no: '', password: '' };
 const blankTicket = { tenant_id: '', unit_id: '', category: '', description: '' };
+const adminPages = ['dashboard', 'users', 'leases', 'rent', 'tickets', 'utilities'];
 
 export default function AdminWorkspace({ logout }) {
-  const [page, setPage] = useState('dashboard');
+  const [page, setPage] = useState(() => {
+    const saved = sessionStorage.getItem('apartmenthub_admin_page');
+    return adminPages.includes(saved) ? saved : 'dashboard';
+  });
   const [stats, setStats] = useState(null);
   const [tickets, setTickets] = useState([]);
   const [ticketSummary, setTicketSummary] = useState({ total: 0, categories: [] });
   const [ticketUsers, setTicketUsers] = useState([]);
   const [ticketDraft, setTicketDraft] = useState(blankTicket);
-  const [ticketFilter, setTicketFilter] = useState('active');
+  const [ticketFilter, setTicketFilter] = useState(() => sessionStorage.getItem('apartmenthub_ticket_filter') === 'all' ? 'all' : 'active');
   const [ticketBusy, setTicketBusy] = useState(false);
   const [workingTicketId, setWorkingTicketId] = useState(null);
   const [users, setUsers] = useState([]);
@@ -29,14 +33,20 @@ export default function AdminWorkspace({ logout }) {
 
   const loadDashboard = async () => { try { setStats(await request('/admin/dashboard')); } catch (error) { setMessage(error.message); } };
   const loadUsers = async (query = search) => { try { setUsers(await request(`/admin/users?search=${encodeURIComponent(query)}`)); } catch (error) { setMessage(error.message); } };
-  const loadTickets = async () => { try { const [allTickets, summary] = await Promise.all([request('/admin/tickets'), request('/admin/tickets/summary')]); setTickets(allTickets); setTicketSummary(summary); } catch (error) { setMessage(error.message); } };
+  const loadTickets = async () => {
+    const [allTickets, summary, allUsers] = await Promise.allSettled([request('/admin/tickets'), request('/admin/tickets/summary'), request('/admin/users')]);
+    if (allTickets.status === 'fulfilled') setTickets(allTickets.value);
+    if (summary.status === 'fulfilled') setTicketSummary(summary.value);
+    if (allUsers.status === 'fulfilled') setTicketUsers(allUsers.value);
+    const failures = [allTickets, summary, allUsers].filter(result => result.status === 'rejected');
+    if (failures.length) setMessage(failures.map(result => result.reason.message).join(' '));
+  };
+  useEffect(() => { sessionStorage.setItem('apartmenthub_admin_page', page); }, [page]);
+  useEffect(() => { sessionStorage.setItem('apartmenthub_ticket_filter', ticketFilter); }, [ticketFilter]);
   useEffect(() => {
     if (page === 'dashboard') loadDashboard();
     if (page === 'users') loadUsers('');
-    if (page === 'tickets') {
-      loadTickets();
-      request('/admin/users').then(setTicketUsers).catch(error => setMessage(error.message));
-    }
+    if (page === 'tickets') loadTickets();
   }, [page]);
   useEffect(() => {
     if (page !== 'dashboard') return;
@@ -112,6 +122,7 @@ export default function AdminWorkspace({ logout }) {
   return <div className="admin-shell">
     <aside className="admin-sidebar"><div className="brand"><span className="brand-mark">⌂</span>ApartmentHub</div><p className="admin-label">ADMIN PANEL</p><button className={page === 'dashboard' ? 'active' : ''} onClick={() => setPage('dashboard')}>Dashboard</button><button className={page === 'users' ? 'active' : ''} onClick={() => setPage('users')}>Tenant management</button><button className={page === 'leases' ? 'active' : ''} onClick={() => setPage('leases')}>Shared leases</button><button className={page === 'rent' ? 'active' : ''} onClick={() => setPage('rent')}>Rent ledger</button><button className={page === 'tickets' ? 'active' : ''} onClick={() => setPage('tickets')}>Maintenance tickets</button><button className={page === 'utilities' ? 'active' : ''} onClick={() => setPage('utilities')}>Utility ledger</button><button className="admin-signout" onClick={logout}>Sign out</button></aside>
     <main className="admin-main" key={page}>
+      {page === 'users' && <div className="admin-user-refresh"><button type="button" className="soft-button" onClick={() => loadUsers(search)}>Refresh tenants</button></div>}
       {page === 'dashboard' && <section><p className="eyebrow">ADMIN OVERVIEW</p><h1>Dashboard</h1><p className="muted">A live summary of the records currently in ApartmentHub.</p><button className="soft-button refresh-button" onClick={loadDashboard}>Refresh data</button><div className="admin-stat-grid"><Stat label="Total users" value={stats?.total_users} /><Stat label="Pending maintenance" value={stats?.pending_tickets} /><Stat label="Resolved tickets" value={stats?.resolved_tickets} /><Stat label="Deposits held / partial" value={stats?.pending_deposits} /><Stat label="Lease agreements" value={stats?.active_leases} /></div><div className="admin-percentage-grid"><PercentageStat label="Rent still unpaid" percentage={stats?.rent_unpaid_percentage} detail={`${stats?.unpaid_rent_count ?? 0} of ${stats?.active_leases ?? 0} leases`} /><PercentageStat label="Utility bills unpaid" percentage={stats?.utility_unpaid_percentage} detail={`${stats?.unpaid_utility_tenants ?? 0} of ${stats?.billed_tenants ?? 0} billed tenants`} /><PercentageStat label="Maintenance unresolved" percentage={stats?.unresolved_ticket_percentage} detail={`${stats?.pending_tickets ?? 0} of ${stats?.total_tickets ?? 0} tickets`} /></div></section>}
       {page === 'users' && <section><div className="admin-title"><div><p className="eyebrow">TENANT DIRECTORY</p><h1>Tenant management</h1><p className="muted">Search by name or email, then update, add or remove the tenant record.</p></div><button className="primary compact" onClick={clearForm}>+ Add tenant</button></div><form className="tenant-search" onSubmit={event => { event.preventDefault(); loadUsers(search); }}><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Search tenant name or email" /><button className="soft-button">Search</button></form><div className="tenant-layout"><article className="panel tenant-list"><div className="list-heading"><strong>{users.length} tenant{users.length === 1 ? '' : 's'}</strong><button className="text-button" onClick={() => { setSearch(''); loadUsers(''); }}>Clear</button></div>{users.map(user => <button className={`tenant-row ${selected?.tenant_id === user.tenant_id ? 'selected' : ''}`} key={user.tenant_id} onClick={() => selectUser(user)}><span className="tenant-avatar">{user.tenant_name.charAt(0)}</span><span><strong>{user.tenant_name}</strong><small>{user.t_email}</small></span></button>)}{!users.length && <p className="muted">No matching tenants found.</p>}</article><article className="panel tenant-form-card"><p className="eyebrow">{selected ? `EDIT TENANT #${selected.tenant_id}` : 'NEW TENANT'}</p><h2>{selected ? selected.tenant_name : 'Create tenant'}</h2><form onSubmit={saveUser}><label>Full name<input required name="tenant_name" value={form.tenant_name} onChange={updateForm} /></label><label>Email address<input required type="email" name="t_email" value={form.t_email} onChange={updateForm} /></label><div className="form-grid"><label>Date of birth<input required type="date" name="t_dob" value={form.t_dob} onChange={updateForm} /></label><label>Phone number<input required name="t_phone_no" value={form.t_phone_no} onChange={updateForm} /></label></div><label>{selected ? 'New password (leave blank to keep current)' : 'Password'}<input required={!selected} minLength="8" type="password" name="password" value={form.password} onChange={updateForm} /></label>{message && <p className={message.includes('successfully') ? 'success-text' : 'error'}>{message}</p>}<div className="actions"><button className="primary" disabled={busy}>{busy ? 'Saving...' : selected ? 'Save changes' : 'Create tenant'}</button>{selected && <button type="button" className="danger-button" onClick={removeUser}>Delete tenant</button>}</div></form></article></div></section>}
       {page === 'tickets' && <AdminTicketsPage

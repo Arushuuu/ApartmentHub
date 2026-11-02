@@ -10,7 +10,7 @@ export default function AdminSharedLeases() {
   const [leases, setLeases] = useState([]);
   const [tenants, setTenants] = useState([]);
   const [units, setUnits] = useState([]);
-  const [selectedId, setSelectedId] = useState(null);
+  const [selectedId, setSelectedId] = useState(() => Number(sessionStorage.getItem('apartmenthub_selected_lease')) || null);
   const [search, setSearch] = useState('');
   const [newLease, setNewLease] = useState({ unit_id: '', primary_tenant_id: '', start_date: today, end_date: yearLater, monthly_rent: '' });
   const [newSigner, setNewSigner] = useState('');
@@ -24,14 +24,21 @@ export default function AdminSharedLeases() {
     catch (caught) { setError(caught.message); }
   }, []);
 
+  const refreshAll = useCallback(async () => {
+    await Promise.all([
+      load(),
+      request('/admin/users').then(setTenants).catch(caught => setError(caught.message)),
+      request('/admin/apartment_units').then(setUnits).catch(caught => setError(caught.message)),
+    ]);
+  }, [load]);
+
   useEffect(() => {
-    load();
-    request('/admin/users').then(setTenants).catch(caught => setError(caught.message));
-    request('/admin/apartment_units').then(setUnits).catch(caught => setError(caught.message));
+    refreshAll();
     const interval = setInterval(load, 10000);
     window.addEventListener('focus', load);
     return () => { clearInterval(interval); window.removeEventListener('focus', load); };
-  }, [load]);
+  }, [load, refreshAll]);
+  useEffect(() => { if (selectedId) sessionStorage.setItem('apartmenthub_selected_lease', String(selectedId)); }, [selectedId]);
 
   const filtered = leases.filter(lease => `${lease.lease_id} ${lease.unit_label} ${lease.signatories.map(tenant => tenant.tenant_name).join(' ')}`.toLowerCase().includes(search.toLowerCase()));
   const selected = filtered.find(lease => lease.lease_id === selectedId) ?? filtered[0];
@@ -84,7 +91,7 @@ export default function AdminSharedLeases() {
   }
 
   return <section className="shared-lease-admin">
-    <div className="admin-title"><div><p className="eyebrow">RENTAL RECORDS</p><h1>Shared leases & deposits</h1><p className="muted">Manage co-signers, each tenant's deposit contribution, and an auditable refund history.</p></div><button className="soft-button" onClick={load}>Refresh</button></div>
+    <div className="admin-title"><div><p className="eyebrow">RENTAL RECORDS</p><h1>Shared leases & deposits</h1><p className="muted">Manage co-signers, each tenant's deposit contribution, and an auditable refund history.</p></div><button type="button" className="soft-button" onClick={refreshAll}>Refresh</button></div>
     {message && <p className="success-text" role="status">{message}</p>}
     {error && <p className="error banner" role="alert">{error}</p>}
     <details className="panel shared-create"><summary>+ Create a shared lease</summary><form onSubmit={createLease}>

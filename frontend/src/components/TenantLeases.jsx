@@ -2,8 +2,8 @@ import './shared-leases.css';
 
 const money = value => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR' }).format(value ?? 0);
 
-export default function TenantLeases({ leases }) {
-  return <section className="tenant-leases"><div className="page-title"><div><p className="eyebrow">YOUR HOME</p><h1>My leases & deposits</h1><p className="muted">See everyone on your lease and how the security deposit is shared. Monthly rent shares appear in Rent after an admin generates the month.</p></div></div>
+export default function TenantLeases({ leases, onRefresh }) {
+  return <section className="tenant-leases"><div className="page-title"><div><p className="eyebrow">YOUR HOME</p><h1>My leases & deposits</h1><p className="muted">See everyone on your lease and how the security deposit is shared. Monthly rent shares appear in Rent after an admin generates the month.</p></div><button type="button" className="soft-button" onClick={onRefresh}>Refresh</button></div>
     {leases.map(lease => <article className="panel tenant-shared-lease" key={lease.lease_id}>
       <p className="eyebrow">LEASE #{lease.lease_id}</p><h2>{lease.unit_label ?? `Unit #${lease.unit_id}`}</h2>
       <div className="tenant-lease-facts"><span><small>Full monthly rent</small><strong>{money(lease.monthly_rent)}</strong></span><span><small>Starts</small><strong>{lease.start_date}</strong></span><span><small>Ends</small><strong>{lease.end_date}</strong></span></div>
