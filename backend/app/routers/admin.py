@@ -9,7 +9,8 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, RentPayment, SecurityDeposit, Tenant, TicketUpdateLog, UtilityBill, UtilityPaymentLog
+from app.models import ApartmentUnit, BillSplitShare, DepositContribution, DepositLedgerEntry, LeaseAgreement, LeaseSignatory, MaintenanceTicket, RentPayment, RentPaymentLog, RentShare, SecurityDeposit, Tenant, TicketUpdateLog, UtilityBill, UtilityPaymentLog
+from app.lease_service import lease_tenant_ids, tenant_leases_query
 from app.routers.auth import account_role, get_current_tenant, get_password_hash
 from app.utility_ledger import bill_view, change_share_status, share_view
 
@@ -32,6 +33,12 @@ class TenantUpdateInput(BaseModel):
 class CloseTicketInput(BaseModel):
     update_message: str = Field(default="Closed by administrator", min_length=1, max_length=1000)
 
+class TicketStatusInput(BaseModel):
+    status: Literal["In Progress", "Resolved", "Closed"]
+    update_message: str = Field(default="", max_length=1000)
+
+NEXT_TICKET_STATUS = {"Open": "In Progress", "In Progress": "Resolved", "Resolved": "Closed"}
+
 class AdminTicketCreateInput(BaseModel):
     tenant_id: int = Field(gt=0)
     unit_id: int | None = Field(default=None, gt=0)
@@ -50,12 +57,16 @@ class UtilityStatusInput(BaseModel):
 
 RESOURCES = {
     "tenants": Tenant, "apartment_units": ApartmentUnit, "lease_agreements": LeaseAgreement,
-    "security_deposits": SecurityDeposit, "rent_payments": RentPayment, "utility_bills": UtilityBill,
+    "security_deposits": SecurityDeposit, "deposit_contributions": DepositContribution,
+    "deposit_ledger_entries": DepositLedgerEntry, "lease_signatories": LeaseSignatory,
+    "rent_payments": RentPayment, "rent_shares": RentShare, "rent_payment_logs": RentPaymentLog, "utility_bills": UtilityBill,
     "bill_split_shares": BillSplitShare, "utility_payment_logs": UtilityPaymentLog,
     "maintenance_tickets": MaintenanceTicket,
     "ticket_update_logs": TicketUpdateLog,
 }
-UTILITY_LEDGER_MODELS = (UtilityBill, BillSplitShare, UtilityPaymentLog)
+WORKFLOW_MODELS = (UtilityBill, BillSplitShare, UtilityPaymentLog, RentPayment, RentShare, RentPaymentLog,
+                   LeaseAgreement, LeaseSignatory, SecurityDeposit, DepositContribution, DepositLedgerEntry,
+                   MaintenanceTicket, TicketUpdateLog)
 
 def require_admin(current_tenant=Depends(get_current_tenant)):
     if account_role(current_tenant) != "admin":
@@ -87,6 +98,12 @@ def clean_values(model, payload: dict[str, Any], creating: bool) -> dict[str, An
 
 def tenant_view(tenant: Tenant) -> dict[str, Any]:
     return {"tenant_id": tenant.tenant_id, "tenant_name": tenant.tenant_name, "t_email": tenant.t_email, "t_dob": tenant.t_dob, "t_phone_no": tenant.t_phone_no}
+
+def ensure_tenant_has_no_lease_history(db: Session, tenant_id: int):
+    if (db.query(LeaseAgreement.lease_id).filter(LeaseAgreement.tenant_id == tenant_id).first()
+            or db.query(LeaseSignatory.lease_id).filter(LeaseSignatory.tenant_id == tenant_id).first()
+            or db.query(DepositContribution.deposit_id).filter(DepositContribution.tenant_id == tenant_id).first()):
+        raise HTTPException(status_code=409, detail="This tenant has lease or deposit history and cannot be deleted")
 
 @router.get("/tables")
 def list_tables(_: Tenant = Depends(require_admin)):
@@ -162,6 +179,7 @@ def delete_user(tenant_id: int, db: Session = Depends(get_db), current_admin: Te
     tenant = db.get(Tenant, tenant_id)
     if tenant is None:
         raise HTTPException(status_code=404, detail="Tenant not found")
+    ensure_tenant_has_no_lease_history(db, tenant_id)
     db.delete(tenant)
     try:
         db.commit()
@@ -179,6 +197,10 @@ def ticket_view(ticket: MaintenanceTicket) -> dict[str, Any]:
         "description": ticket.description,
         "status": ticket.status,
         "created_at": ticket.created_at,
+        "updates": [{"log_id": log.log_id, "updated_by": log.updated_by,
+                     "update_message": log.update_message, "updated_timestamp": log.updated_timestamp,
+                     "previous_status": log.previous_status, "new_status": log.new_status}
+                    for log in ticket.logs],
     }
 
 @router.get("/tickets")
@@ -191,7 +213,7 @@ def list_tickets(db: Session = Depends(get_db), _: Tenant = Depends(require_admi
 @router.get("/tickets/active")
 def active_tickets(db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
     tickets = (db.query(MaintenanceTicket)
-        .filter(MaintenanceTicket.status.in_(["Open", "In Progress"]))
+        .filter(MaintenanceTicket.status.in_(["Open", "In Progress", "Resolved"]))
         .order_by(MaintenanceTicket.created_at.desc(), MaintenanceTicket.ticket_id.desc())
         .all())
     return [ticket_view(ticket) for ticket in tickets]
@@ -218,8 +240,7 @@ def create_admin_ticket(payload: AdminTicketCreateInput, db: Session = Depends(g
         raise HTTPException(status_code=404, detail="Tenant not found")
     unit_id = payload.unit_id
     if unit_id is None:
-        lease = (db.query(LeaseAgreement)
-            .filter(LeaseAgreement.tenant_id == tenant.tenant_id)
+        lease = (tenant_leases_query(db, tenant.tenant_id)
             .order_by(LeaseAgreement.end_date.desc(), LeaseAgreement.lease_id.desc())
             .first())
         unit_id = lease.unit_id if lease else None
@@ -258,13 +279,12 @@ def create_utility_bill(payload: UtilityBillCreateInput, db: Session = Depends(g
         raise HTTPException(status_code=404, detail="Apartment unit not found")
     if payload.due_date < payload.bill_date:
         raise HTTPException(status_code=400, detail="Due date must be on or after bill date")
-    tenant_ids = [tenant_id for (tenant_id,) in (db.query(LeaseAgreement.tenant_id)
+    active_leases = (db.query(LeaseAgreement)
         .filter(LeaseAgreement.unit_id == payload.unit_id,
                 LeaseAgreement.start_date <= payload.bill_date,
                 LeaseAgreement.end_date >= payload.bill_date)
-        .distinct()
-        .order_by(LeaseAgreement.tenant_id)
-        .all())]
+        .all())
+    tenant_ids = sorted({tenant_id for lease in active_leases for tenant_id in lease_tenant_ids(lease)})
     if not tenant_ids:
         raise HTTPException(status_code=400, detail="No tenants have an active lease for this unit on the bill date")
     total_cents = int(payload.total_amount * 100)
@@ -310,17 +330,30 @@ def update_utility_share_status(share_id: int, payload: UtilityStatusInput,
     db.refresh(share)
     return share_view(share)
 
-@router.patch("/tickets/{ticket_id}/close")
-def close_ticket(ticket_id: int, payload: CloseTicketInput, db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):
-    ticket = db.get(MaintenanceTicket, ticket_id)
+def transition_ticket(ticket_id: int, next_status: str, message: str, db: Session, current_admin: Tenant):
+    ticket = db.query(MaintenanceTicket).filter(MaintenanceTicket.ticket_id == ticket_id).with_for_update().first()
     if ticket is None:
         raise HTTPException(status_code=404, detail="Maintenance ticket not found")
-    if ticket.status in ("Resolved", "Closed"):
-        raise HTTPException(status_code=400, detail="This maintenance ticket is already closed")
-    ticket.status = "Closed"
-    db.add(TicketUpdateLog(ticket_id=ticket.ticket_id, updated_by=current_admin.tenant_name, update_message=payload.update_message))
-    db.commit(); db.refresh(ticket)
-    return {"message": "Maintenance ticket closed", "ticket_id": ticket.ticket_id, "status": ticket.status}
+    expected = NEXT_TICKET_STATUS.get(ticket.status)
+    if next_status != expected:
+        db.rollback()
+        raise HTTPException(status_code=409, detail=f"Ticket is {ticket.status}. Next status must be {expected or 'none'}")
+    previous = ticket.status
+    ticket.status = next_status
+    db.add(TicketUpdateLog(ticket_id=ticket.ticket_id, updated_by=current_admin.tenant_name,
+                           update_message=message.strip() or f"Status changed to {next_status}",
+                           previous_status=previous, new_status=next_status))
+    db.commit()
+    db.refresh(ticket)
+    return ticket_view(ticket)
+
+@router.patch("/tickets/{ticket_id}/status")
+def update_ticket_status(ticket_id: int, payload: TicketStatusInput, db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):
+    return transition_ticket(ticket_id, payload.status, payload.update_message, db, current_admin)
+
+@router.patch("/tickets/{ticket_id}/close")
+def close_ticket(ticket_id: int, payload: CloseTicketInput, db: Session = Depends(get_db), current_admin: Tenant = Depends(require_admin)):
+    return transition_ticket(ticket_id, "Closed", payload.update_message, db, current_admin)
 
 @router.get("/{resource}")
 def list_records(resource: str, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
@@ -330,8 +363,8 @@ def list_records(resource: str, db: Session = Depends(get_db), _: Tenant = Depen
 @router.post("/{resource}", status_code=status.HTTP_201_CREATED)
 def create_record(resource: str, payload: dict[str, Any], db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
     model = model_for(resource)
-    if model in UTILITY_LEDGER_MODELS:
-        raise HTTPException(status_code=400, detail="Use the utility bill workflow to keep shares and payment history in sync")
+    if model in WORKFLOW_MODELS:
+        raise HTTPException(status_code=400, detail="Use the dedicated workflow to keep linked records in sync")
     values = clean_values(model, payload, creating=True)
     if model is Tenant and "password_hash" not in values:
         raise HTTPException(status_code=400, detail="A password is required when creating a tenant")
@@ -346,8 +379,8 @@ def create_record(resource: str, payload: dict[str, Any], db: Session = Depends(
 @router.patch("/{resource}/{record_id}")
 def update_record(resource: str, record_id: int, payload: dict[str, Any], db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
     model = model_for(resource)
-    if model in UTILITY_LEDGER_MODELS:
-        raise HTTPException(status_code=400, detail="Use the utility bill workflow to keep shares and payment history in sync")
+    if model in WORKFLOW_MODELS:
+        raise HTTPException(status_code=400, detail="Use the dedicated workflow to keep linked records in sync")
     record = db.get(model, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
@@ -362,11 +395,13 @@ def update_record(resource: str, record_id: int, payload: dict[str, Any], db: Se
 @router.delete("/{resource}/{record_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_record(resource: str, record_id: int, db: Session = Depends(get_db), _: Tenant = Depends(require_admin)):
     model = model_for(resource)
-    if model in UTILITY_LEDGER_MODELS:
-        raise HTTPException(status_code=400, detail="Use the utility bill workflow to keep shares and payment history in sync")
+    if model in WORKFLOW_MODELS:
+        raise HTTPException(status_code=400, detail="Use the dedicated workflow to keep linked records in sync")
     record = db.get(model, record_id)
     if record is None:
         raise HTTPException(status_code=404, detail="Record not found")
+    if model is Tenant:
+        ensure_tenant_has_no_lease_history(db, record_id)
     db.delete(record)
     try:
         db.commit()

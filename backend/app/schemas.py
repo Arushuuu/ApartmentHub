@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -74,9 +74,21 @@ class TicketResponse(BaseModel):
     description: str
     status: str
     created_at: datetime
+    updates: list["TicketUpdateResponse"] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
 
 class TicketUpdateCreate(BaseModel):
+    update_message: str = Field(min_length=1, max_length=1000)
+
+class TicketUpdateResponse(BaseModel):
+    log_id: int
+    updated_by: str
     update_message: str
+    updated_timestamp: datetime
+    previous_status: str | None = None
+    new_status: str | None = None
+
+    class Config:
+        from_attributes = True

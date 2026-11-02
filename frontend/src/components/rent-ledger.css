@@ -1,0 +1,31 @@
+.rent-page { display: grid; gap: 18px; }
+.rent-page .page-title, .rent-page .admin-title { margin-bottom: 0; }
+.rent-card-grid, .rent-admin-list { display: grid; gap: 16px; }
+.rent-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.rent-card, .rent-admin-card { display: grid; gap: 17px; }
+.rent-card-head, .rent-share-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.rent-card-head h2, .rent-generate h2 { margin: 0; font-size: 20px; }
+.rent-card-head .eyebrow { margin: 0 0 5px; }
+.rent-card-head .badge { flex: none; }
+.rent-card-head .muted { margin: 5px 0 0; }
+.rent-amount { display: flex; flex-wrap: wrap; gap: 20px; padding: 15px; background: #f8ede3; border-radius: 13px; }
+.rent-amount span { display: grid; gap: 3px; color: #725b65; font-size: 12px; }
+.rent-amount strong { color: #5d3b4b; font-size: 21px; }
+.rent-report, .rent-admin-action { display: flex; align-items: end; gap: 10px; flex-wrap: wrap; }
+.rent-report label, .rent-admin-action label { flex: 1; min-width: 180px; }
+.rent-history { border-top: 1px solid #eadfd6; padding-top: 10px; }
+.rent-history summary { cursor: pointer; color: #85586f; font-weight: 800; font-size: 13px; }
+.rent-history ol { margin: 12px 0 0; padding-left: 20px; }
+.rent-history li { margin: 0 0 10px; color: #5d3b4b; }
+.rent-history li span, .rent-history li small { display: block; margin-top: 3px; overflow-wrap: anywhere; }
+.rent-history li small { color: #907b85; }
+.rent-generate { display: flex; align-items: end; flex-wrap: wrap; gap: 16px; }
+.rent-generate > div { flex: 2; min-width: 220px; }
+.rent-generate label { flex: 1; min-width: 160px; }
+.rent-generate p { margin: 5px 0 0; }
+.rent-search { display: grid; gap: 6px; max-width: 420px; }
+.rent-share-list { display: grid; gap: 12px; }
+.rent-share-row { display: grid; gap: 11px; padding: 15px; border: 1px solid #eadfd6; border-radius: 13px; background: #fffaf5; }
+.rent-share-head { align-items: center; flex-wrap: wrap; }
+.rent-share-head strong { color: #5d3b4b; }
+@media (max-width: 760px) { .rent-card-grid { grid-template-columns: 1fr; } .rent-card-head { flex-wrap: wrap; } }

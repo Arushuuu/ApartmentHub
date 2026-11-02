@@ -10,7 +10,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 
 from app.database import SessionLocal
-from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, RentPayment, SecurityDeposit, Tenant, UtilityBill
+from app.models import ApartmentUnit, BillSplitShare, DepositContribution, DepositLedgerEntry, LeaseAgreement, LeaseSignatory, MaintenanceTicket, RentPayment, SecurityDeposit, Tenant, UtilityBill
 from app.routers.auth import get_password_hash
 
 
@@ -100,7 +100,15 @@ def main():
             db.add(lease)
             db.flush()
             new_leases.append(lease)
-            db.add(SecurityDeposit(lease_id=lease.lease_id, amount_held=rent * 2, refund_status="Held"))
+            db.add(LeaseSignatory(lease_id=lease.lease_id, tenant_id=tenant.tenant_id))
+            deposit = SecurityDeposit(lease_id=lease.lease_id, amount_held=rent * 2, refund_status="Held")
+            db.add(deposit)
+            db.flush()
+            db.add(DepositContribution(deposit_id=deposit.deposit_id, tenant_id=tenant.tenant_id,
+                                       contributed_amt=rent * 2, refunded_amt=0))
+            db.add(DepositLedgerEntry(deposit_id=deposit.deposit_id, tenant_id=tenant.tenant_id,
+                                      action="Contribution", amount=rent * 2,
+                                      recorded_by="Demo seed", note="Initial deposit contribution"))
 
             # Give half the tenants a visible utility bill and every other
             # tenant a ticket, creating useful records for both dashboards.

@@ -1,9 +1,13 @@
-from fastapi import APIRouter, Depends
+from datetime import date
+
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import ApartmentUnit, BillSplitShare, LeaseAgreement, MaintenanceTicket, SecurityDeposit
+from app.models import ApartmentUnit, BillSplitShare, DepositContribution, DepositLedgerEntry, LeaseAgreement, LeaseSignatory, MaintenanceTicket, RentPayment, RentShare, SecurityDeposit
+from app.lease_service import lease_tenant_ids, tenant_leases_query
+from app.rent_ledger import split_amount
 from app.routers.auth import get_current_tenant
 from app.schemas import AccountSetup
 
@@ -12,11 +16,25 @@ router = APIRouter(prefix="/account", tags=["Account"])
 @router.get("/dashboard")
 def dashboard(current_tenant=Depends(get_current_tenant), db: Session = Depends(get_db)):
     tenant_id = current_tenant.tenant_id
-    active_lease = (db.query(LeaseAgreement).filter(LeaseAgreement.tenant_id == tenant_id)
+    active_lease = (tenant_leases_query(db, tenant_id)
         .order_by(LeaseAgreement.end_date.desc()).first())
     due = db.query(func.coalesce(func.sum(BillSplitShare.owed_amt), 0)).filter(BillSplitShare.tenant_id == tenant_id, BillSplitShare.payment_status != "Paid").scalar()
     open_tickets = db.query(func.count(MaintenanceTicket.ticket_id)).filter(MaintenanceTicket.tenant_id == tenant_id, MaintenanceTicket.status.in_(["Open", "In Progress"])).scalar()
-    return {"tenant_name": current_tenant.tenant_name, "monthly_rent": active_lease.monthly_rent if active_lease else 0, "utilities_due": due, "open_tickets": open_tickets, "lease_end": active_lease.end_date if active_lease else None}
+    my_rent_share = 0
+    if active_lease:
+        current_month = date.today().replace(day=1)
+        billed_share = (db.query(RentShare).join(RentPayment)
+                        .filter(RentPayment.lease_id == active_lease.lease_id,
+                                RentPayment.billing_month == current_month,
+                                RentShare.tenant_id == tenant_id).first())
+        if billed_share:
+            my_rent_share = billed_share.owed_amt
+        else:
+            my_rent_share = next((amount for member_id, amount in split_amount(active_lease.monthly_rent, lease_tenant_ids(active_lease))
+                                  if member_id == tenant_id), 0)
+    return {"tenant_name": current_tenant.tenant_name, "monthly_rent": active_lease.monthly_rent if active_lease else 0,
+            "my_rent_share": my_rent_share, "utilities_due": due, "open_tickets": open_tickets,
+            "lease_end": active_lease.end_date if active_lease else None}
 
 @router.post("/setup")
 def complete_setup(payload: AccountSetup, current_tenant=Depends(get_current_tenant), db: Session = Depends(get_db)):
@@ -37,7 +55,17 @@ def complete_setup(payload: AccountSetup, current_tenant=Depends(get_current_ten
         lease = LeaseAgreement(unit_id=unit.unit_id, tenant_id=current_tenant.tenant_id, start_date=payload.start_date, end_date=payload.end_date, monthly_rent=payload.monthly_rent)
         db.add(lease)
         db.flush()
-        if payload.deposit_amount is not None:
-            db.add(SecurityDeposit(lease_id=lease.lease_id, amount_held=payload.deposit_amount, refund_status="Held"))
+        db.add(LeaseSignatory(lease_id=lease.lease_id, tenant_id=current_tenant.tenant_id))
+        if payload.deposit_amount is not None and payload.deposit_amount < 0:
+            raise HTTPException(status_code=400, detail="Security deposit cannot be negative")
+        if payload.deposit_amount:
+            deposit = SecurityDeposit(lease_id=lease.lease_id, amount_held=payload.deposit_amount, refund_status="Held")
+            db.add(deposit)
+            db.flush()
+            db.add(DepositContribution(deposit_id=deposit.deposit_id, tenant_id=current_tenant.tenant_id,
+                                       contributed_amt=payload.deposit_amount, refunded_amt=0))
+            db.add(DepositLedgerEntry(deposit_id=deposit.deposit_id, tenant_id=current_tenant.tenant_id,
+                                      action="Contribution", amount=payload.deposit_amount,
+                                      recorded_by=current_tenant.tenant_name, note="Initial deposit at lease setup"))
     db.commit()
     return {"message": "Optional setup saved", "created": True, "unit_id": unit.unit_id if unit else None}

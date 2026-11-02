@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import ApartmentUnit, LeaseAgreement, MaintenanceTicket, TicketUpdateLog
+from app.lease_service import tenant_leases_query
 from app.routers.auth import get_current_tenant
 from app.schemas import TicketCreate, TicketResponse, TicketUpdateCreate
 
@@ -10,16 +11,20 @@ router = APIRouter(prefix="/tickets", tags=["Maintenance"])
 
 @router.get("/me", response_model=list[TicketResponse])
 def my_tickets(current_tenant=Depends(get_current_tenant), db: Session = Depends(get_db)):
-    return (db.query(MaintenanceTicket)
+    tickets = (db.query(MaintenanceTicket)
         .filter(MaintenanceTicket.tenant_id == current_tenant.tenant_id)
         .order_by(MaintenanceTicket.created_at.desc(), MaintenanceTicket.ticket_id.desc())
         .all())
+    return [{"ticket_id": ticket.ticket_id, "category": ticket.category,
+             "description": ticket.description, "status": ticket.status,
+             "created_at": ticket.created_at, "updates": ticket.logs}
+            for ticket in tickets]
 
 @router.post("", response_model=TicketResponse, status_code=status.HTTP_201_CREATED)
 def create_ticket(payload: TicketCreate, current_tenant=Depends(get_current_tenant), db: Session = Depends(get_db)):
     unit_id = payload.unit_id
     if unit_id is None:
-        lease = db.query(LeaseAgreement).filter(LeaseAgreement.tenant_id == current_tenant.tenant_id).order_by(LeaseAgreement.end_date.desc()).first()
+        lease = tenant_leases_query(db, current_tenant.tenant_id).order_by(LeaseAgreement.end_date.desc()).first()
         unit_id = lease.unit_id if lease else None
     if unit_id is None or db.get(ApartmentUnit, unit_id) is None:
         raise HTTPException(status_code=400, detail="Add a lease during setup or enter a valid unit ID")
@@ -41,6 +46,8 @@ def add_ticket_update(ticket_id: int, payload: TicketUpdateCreate, current_tenan
     ticket = db.query(MaintenanceTicket).filter(MaintenanceTicket.ticket_id == ticket_id, MaintenanceTicket.tenant_id == current_tenant.tenant_id).first()
     if ticket is None:
         raise HTTPException(status_code=404, detail="Ticket not found")
+    if ticket.status == "Closed":
+        raise HTTPException(status_code=409, detail="Closed tickets cannot receive new updates")
     log = TicketUpdateLog(ticket_id=ticket.ticket_id, updated_by=current_tenant.tenant_name, update_message=payload.update_message)
     db.add(log)
     db.commit()

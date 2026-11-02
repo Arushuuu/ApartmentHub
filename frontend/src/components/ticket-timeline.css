@@ -1,0 +1,11 @@
+.ticket-history { border-top: 1px solid #eadfd6; padding-top: 12px; color: #5d3b4b; }
+.ticket-history summary { cursor: pointer; font-weight: 800; font-size: 13px; }
+.ticket-history ol { list-style: none; margin: 14px 0 0 6px; padding: 0 0 0 17px; border-left: 2px solid #dfd3c3; }
+.ticket-history li { display: flex; gap: 14px; position: relative; padding: 0 0 18px; }
+.ticket-history li:last-child { padding-bottom: 3px; }
+.history-dot { position: absolute; left: -24px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #85586f; border: 2px solid #fffaf5; }
+.ticket-history li div { display: grid; gap: 3px; }
+.ticket-history li p { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; color: #725b65; }
+.ticket-history li small { color: #907b85; }
+.tenant-ticket-list { display: grid; gap: 16px; }
+.tenant-ticket-card { display: grid; gap: 14px; }

@@ -1,0 +1,19 @@
+.shared-lease-admin,.tenant-leases{display:grid;gap:18px}
+.shared-create{margin:0}.shared-create summary,.shared-history summary{cursor:pointer;color:#85586f;font-weight:900}
+.shared-create form{margin-top:18px}.shared-form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.shared-layout{display:grid;grid-template-columns:minmax(240px,310px) minmax(0,1fr);gap:18px;align-items:start}
+.shared-list{max-height:780px;overflow:auto;display:grid;gap:7px}.shared-list input{width:100%}
+.shared-count{margin:7px 0;color:#725b65;font-size:12px;font-weight:800}.shared-list-row{display:grid;gap:3px;width:100%;text-align:left;padding:12px;background:transparent;border-radius:10px;color:#35232c}
+.shared-list-row:hover,.shared-list-row.selected{background:#f8ede3}.shared-list-row strong{font-size:13px}.shared-list-row span{font-size:11px;color:#725b65}
+.shared-detail{display:grid;gap:18px;min-width:0}.shared-detail h2{margin:0 0 5px}.shared-detail h3,.tenant-lease-section h3{margin:22px 0 10px;font-size:15px;color:#5d3b4b}
+.shared-pills{display:flex;gap:8px;flex-wrap:wrap}.shared-pills span{padding:7px 11px;border-radius:999px;background:#f8ede3;color:#85586f;font-size:12px;font-weight:800}
+.shared-inline-form{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:20px 0 0}.shared-inline-form label{flex:1;min-width:170px}.shared-inline-form button{white-space:nowrap;padding:12px 15px}
+.shared-contribution-form{padding:16px;background:#f8ede3;border-radius:13px}.shared-contribution{display:grid;gap:5px;padding:15px 0;border-top:1px solid #eadfd6;color:#5d3b4b}
+.shared-contribution:first-of-type{margin-top:20px}.shared-contribution>span{font-size:12px;color:#725b65}.shared-contribution .shared-inline-form{margin-top:7px}
+.shared-balance{background:#f8ede3;border-radius:11px;padding:12px;color:#725b65;font-size:13px}.shared-balance strong{color:#5d3b4b}
+.shared-reconcile-note{background:#fff3dc;border-radius:11px;padding:12px;color:#765522;font-size:12px;line-height:1.5}
+.shared-history{border-top:1px solid #eadfd6;padding-top:14px;margin-top:20px;font-size:12px}.shared-history ol{padding-left:23px;display:grid;gap:10px}.shared-history li{color:#725b65;line-height:1.4}.shared-history li strong{color:#5d3b4b}.shared-history li small{display:block;color:#907b85}
+.tenant-shared-lease{display:grid;gap:4px}.tenant-shared-lease h2{margin:0 0 18px}.tenant-lease-facts{display:flex;flex-wrap:wrap;gap:16px 35px}.tenant-lease-facts span{display:grid;gap:4px}.tenant-lease-facts small{font-size:11px;color:#907b85}.tenant-lease-facts strong{font-size:15px;color:#5d3b4b}
+.tenant-lease-section{border-top:1px solid #eadfd6;margin-top:20px}.tenant-contribution-list{display:grid;gap:8px;margin:14px 0}.tenant-contribution-list>div{display:flex;gap:12px;flex-wrap:wrap;background:#f8ede3;border-radius:10px;padding:10px;font-size:12px;color:#725b65}.tenant-contribution-list strong{color:#5d3b4b;margin-right:auto}
+@media(max-width:1050px){.shared-layout{grid-template-columns:1fr}.shared-list{max-height:240px}}
+@media(max-width:600px){.shared-form-grid{grid-template-columns:1fr}.shared-inline-form{display:grid}.shared-inline-form label{min-width:0}.shared-inline-form button{width:max-content}}
